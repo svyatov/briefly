@@ -1,9 +1,12 @@
+/.compound-engineering/
 /.bundle/
 /.yardoc
 /.ruby-lsp/
 /_yardoc/
 /coverage/
 /doc/
+/docs/
 /pkg/
 /tmp/
 Gemfile.lock
+CONCEPTS.md
