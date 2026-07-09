@@ -7,7 +7,7 @@ module Briefly
     # Usable on its own, for a facade that has no framework shortcuts but does memoize objects
     # holding on to reloadable application classes:
     #
-    #   Admin = Briefly.new { use Briefly::Rails::Reload }
+    #   Admin = Briefly.define { use Briefly::Rails::Reload }
     #
     # The callback holds the facade for the process lifetime and cannot be deregistered. Install it
     # on long-lived facades assigned to constants, not on facades built per request.

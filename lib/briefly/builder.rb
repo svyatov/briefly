@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Briefly
-  # Receives the DSL. {Briefly.new}'s block and {Briefly::Facade#configure}'s block are
+  # Receives the DSL. {Briefly.define}'s block and {Briefly::Facade#configure}'s block are
   # +instance_eval+'d here, never on the facade, so DSL verbs can never collide with shortcut names.
   #
   # The block only collects; {#compile!} then validates, and {Briefly::Facade#configure} installs.

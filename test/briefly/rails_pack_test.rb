@@ -104,8 +104,8 @@ class RailsPackTest < BrieflyTest
 
   def test_the_mini_packs_install_independently
     with_rails do |rails, _controller, _facade|
-      assert_equal [:env], Briefly.new { use "rails/env" }.shortcuts.grep(:env)
-      assert_same rails.configuration, Briefly.new { use Briefly::Rails::Config }.config
+      assert_equal [:env], Briefly.define { use "rails/env" }.shortcuts.grep(:env)
+      assert_same rails.configuration, Briefly.define { use Briefly::Rails::Config }.config
     end
   end
 
@@ -130,7 +130,7 @@ class RailsPackTest < BrieflyTest
 
   def with_rails(root: Dir.pwd, env: "test")
     RailsDouble.with(root: root, env: env) do |rails, controller|
-      yield rails, controller, Briefly.new { use Briefly::Rails }
+      yield rails, controller, Briefly.define { use Briefly::Rails }
     end
   end
 

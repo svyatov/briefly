@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## v0.1.0 (2026-07-09)
 
 ### Added
-- `Briefly.new` builds a facade of real, introspectable, stubbable methods — no `method_missing`.
+- `Briefly.define` builds a facade of real, introspectable, stubbable methods — no `method_missing`.
 - `shortcut(canonical, *aliases, &body)` with argument, keyword and block forwarding; predicate and bang names; last-declaration-wins overrides.
 - `memoize` — permanent per-process caching, correct for `nil`/`false`, never caching a rescued fallback.
 - `rescue_from` — facade-scoped, facade-wide and global (`Briefly.rescue_from`) handlers whose return value becomes the shortcut's value.

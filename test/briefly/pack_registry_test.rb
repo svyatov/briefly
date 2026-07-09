@@ -30,13 +30,13 @@ class PackRegistryTest < BrieflyTest
   def test_a_registered_pack_is_used_by_name
     Briefly.register("test/named", NamedPack)
 
-    assert_equal :named, Briefly.new { use "test/named" }.named
+    assert_equal :named, Briefly.define { use "test/named" }.named
   end
 
   def test_a_name_may_be_a_symbol
     Briefly.register(:"test/named", NamedPack)
 
-    assert_equal :named, Briefly.new { use :"test/named" }.named
+    assert_equal :named, Briefly.define { use :"test/named" }.named
   end
 
   def test_register_returns_the_module_so_it_chains
@@ -47,11 +47,11 @@ class PackRegistryTest < BrieflyTest
     Briefly.register("test/named", NamedPack)
     Briefly.register("test/named", OptionPack)
 
-    assert_equal "hi", Briefly.new { use "test/named" }.greeting
+    assert_equal "hi", Briefly.define { use "test/named" }.greeting
   end
 
   def test_an_unknown_name_raises
-    error = assert_raises(Briefly::UnknownPackError) { Briefly.new { use "test/nope" } }
+    error = assert_raises(Briefly::UnknownPackError) { Briefly.define { use "test/nope" } }
 
     assert_match(%r{unknown pack: "test/nope"}, error.message)
   end
@@ -106,21 +106,21 @@ class PackRegistryTest < BrieflyTest
   end
 
   def test_a_pack_takes_options
-    facade = Briefly.new { use OptionPack, greeting: "hello" }
+    facade = Briefly.define { use OptionPack, greeting: "hello" }
 
     assert_equal "hello", facade.greeting
   end
 
   def test_a_named_pack_takes_options
     Briefly.register("test/named", OptionPack)
-    facade = Briefly.new { use "test/named", greeting: "hello" }
+    facade = Briefly.define { use "test/named", greeting: "hello" }
 
     assert_equal "hello", facade.greeting
   end
 
   # Ruby drops an empty `**` splat, so `install(builder)` never sees the keyword.
   def test_a_pack_that_takes_no_options_still_installs
-    facade = Briefly.new { use NamedPack }
+    facade = Briefly.define { use NamedPack }
 
     assert_equal :named, facade.named
   end

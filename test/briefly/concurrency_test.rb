@@ -8,7 +8,7 @@ class ConcurrencyTest < BrieflyTest
   def test_a_memoized_body_runs_once_under_contention
     lock = Mutex.new
     calls = 0
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:slow) do
         lock.synchronize { calls += 1 }
         sleep 0.01
@@ -28,7 +28,7 @@ class ConcurrencyTest < BrieflyTest
   def test_a_memoized_body_may_call_another_memoized_shortcut
     inner_calls = 0
     outer_calls = 0
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:inner) do
         inner_calls += 1
         :inner
@@ -55,7 +55,7 @@ class ConcurrencyTest < BrieflyTest
     inner_calls = 0
     outer_calls = 0
     lock = Mutex.new
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:inner) { lock.synchronize { inner_calls += 1 } }
       memoize :inner
       shortcut(:outer) do
@@ -74,7 +74,7 @@ class ConcurrencyTest < BrieflyTest
   # The behavioural test below cannot distinguish copy-on-write from an unsynchronized mutable Hash
   # on CRuby, because a reader never observes nil either way. Assert the invariant directly.
   def test_the_memo_store_is_always_an_immutable_snapshot
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:value) { Object.new }
       memoize :value
     end
@@ -89,7 +89,7 @@ class ConcurrencyTest < BrieflyTest
   end
 
   def test_clearing_memos_concurrently_with_reads_never_tears
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:value) { Object.new }
       memoize :value
     end

@@ -1,5 +1,5 @@
 module Briefly
-  # The object returned by `Briefly.new`. Shortcuts are compiled onto its singleton class as real
+  # The object returned by `Briefly.define`. Shortcuts are compiled onto its singleton class as real
   # methods; RBS cannot see them, so they do not appear here.
   class Facade
     # Names a shortcut may not take.

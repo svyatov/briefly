@@ -7,7 +7,7 @@ class RailsReloadTest < BrieflyTest
   def test_a_standalone_facade_clears_its_memos_on_prepare
     RailsDouble.with(root: Dir.pwd) do |rails, _controller|
       calls = 0
-      facade = Briefly.new do
+      facade = Briefly.define do
         use Briefly::Rails::Reload
         shortcut(:value) { calls += 1 }
         memoize :value
@@ -27,7 +27,7 @@ class RailsReloadTest < BrieflyTest
 
   def test_the_reload_pack_adds_no_shortcuts
     RailsDouble.with(root: Dir.pwd) do
-      facade = Briefly.new { use Briefly::Rails::Reload }
+      facade = Briefly.define { use Briefly::Rails::Reload }
 
       assert_empty facade.shortcuts
     end
@@ -37,7 +37,7 @@ class RailsReloadTest < BrieflyTest
   def test_the_rails_pack_composes_the_reload_pack
     RailsDouble.with(root: Dir.pwd) do |rails, _controller|
       calls = 0
-      facade = Briefly.new do
+      facade = Briefly.define do
         use Briefly::Rails
         shortcut(:policy) { calls += 1 }
         memoize :policy
@@ -60,7 +60,7 @@ class RailsReloadTest < BrieflyTest
   def test_reconfiguring_does_not_register_a_duplicate_callback
     RailsDouble.with(root: Dir.pwd) do |rails, _controller|
       cleared = 0
-      facade = Briefly.new { use Briefly::Rails::Reload }
+      facade = Briefly.define { use Briefly::Rails::Reload }
       facade.configure { use Briefly::Rails::Reload }
       facade.define_singleton_method(:clear_memos!) { cleared += 1 }
 
@@ -71,7 +71,7 @@ class RailsReloadTest < BrieflyTest
   end
 
   def test_it_raises_outside_a_booted_application
-    error = assert_raises(Briefly::Error) { Briefly.new { use Briefly::Rails::Reload } }
+    error = assert_raises(Briefly::Error) { Briefly.define { use Briefly::Rails::Reload } }
 
     assert_match(/booted application/, error.message)
   end

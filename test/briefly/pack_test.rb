@@ -33,38 +33,38 @@ class PackTest < BrieflyTest
   end
 
   def test_use_installs_a_pack
-    facade = Briefly.new { use LeafPack }
+    facade = Briefly.define { use LeafPack }
 
     assert_equal :leaf, facade.leaf
   end
 
   def test_a_pack_can_memoize
-    facade = Briefly.new { use LeafPack }
+    facade = Briefly.define { use LeafPack }
 
     assert_equal [:leaf], memoized_names(facade)
   end
 
   def test_packs_compose
-    facade = Briefly.new { use ComposingPack }
+    facade = Briefly.define { use ComposingPack }
 
     assert_equal %i[composed leaf], facade.shortcuts
   end
 
   def test_use_returns_the_builder_so_packs_can_chain
-    facade = Briefly.new { use(LeafPack).use(ComposingPack) }
+    facade = Briefly.define { use(LeafPack).use(ComposingPack) }
 
     assert_equal %i[composed leaf], facade.shortcuts
   end
 
   def test_a_pack_receives_the_facade_for_lifecycle_wiring
     pack = LifecyclePack.new
-    facade = Briefly.new { use pack }
+    facade = Briefly.define { use pack }
 
     assert_same facade, pack.seen_facade
   end
 
   def test_an_app_can_override_a_pack_shortcut
-    facade = Briefly.new do
+    facade = Briefly.define do
       use LeafPack
       shortcut(:leaf) { :overridden }
     end
@@ -73,7 +73,7 @@ class PackTest < BrieflyTest
   end
 
   def test_a_pack_can_be_used_from_configure
-    facade = Briefly.new
+    facade = Briefly.define
     facade.configure { use LeafPack }
 
     assert_equal :leaf, facade.leaf

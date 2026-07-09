@@ -4,7 +4,7 @@ module Briefly
   module Rails
     # Shortcut pack for a single database, reached through one Active Record class.
     #
-    #   App = Briefly.new do
+    #   App = Briefly.define do
     #     namespace(:db)  { use Briefly::Rails::DB }
     #     namespace(:db2) { use Briefly::Rails::DB, base: "SecondaryApplicationRecord" }
     #   end

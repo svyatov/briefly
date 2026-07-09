@@ -9,7 +9,7 @@ require "briefly/builder"
 
 # A terse, curated facade over an application's most frequently reached-for objects.
 #
-#   App = Briefly.new do
+#   App = Briefly.define do
 #     use Briefly::Rails
 #     shortcut(:redis) { REDIS_POOL }
 #   end
@@ -34,7 +34,7 @@ module Briefly
     #
     # @yield [] the shortcut declarations
     # @return [Briefly::Facade]
-    def new(&) = Facade.new.configure(&)
+    def define(&) = Facade.new.configure(&)
 
     # Registers a pack under a short name, so +use "myapp/redis"+ resolves it. Re-registering a name
     # overrides it. There is no inflection and no path guessing: this table is the only source of truth.

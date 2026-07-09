@@ -65,7 +65,7 @@ class RailsDbTest < BrieflyTest
     with_db do |primary, _db|
       secondary = RailsDouble::Model.new
       Object.const_set(:SecondaryRecord, secondary)
-      facade = Briefly.new { namespace(:db2) { use "rails/db", base: "SecondaryRecord" } }
+      facade = Briefly.define { namespace(:db2) { use "rails/db", base: "SecondaryRecord" } }
 
       facade.db2.txn { :ok }
 
@@ -78,7 +78,7 @@ class RailsDbTest < BrieflyTest
 
   def test_base_accepts_a_module
     model = Module.new { def self.lease_connection = :leased }
-    facade = Briefly.new { namespace(:db) { use Briefly::Rails::DB, base: model } }
+    facade = Briefly.define { namespace(:db) { use Briefly::Rails::DB, base: model } }
 
     assert_equal :leased, facade.db.conn
   end
@@ -99,13 +99,13 @@ class RailsDbTest < BrieflyTest
   def test_the_pack_installs_without_a_booted_application
     refute defined?(::Rails), "this test must run with no ::Rails constant"
 
-    facade = Briefly.new { use Briefly::Rails::DB }
+    facade = Briefly.define { use Briefly::Rails::DB }
 
     assert_equal %i[connection query transaction], facade.shortcuts
   end
 
   def test_the_pack_memoizes_nothing
-    facade = Briefly.new { use Briefly::Rails::DB }
+    facade = Briefly.define { use Briefly::Rails::DB }
 
     assert_empty memoized_names(facade)
   end
@@ -116,7 +116,7 @@ class RailsDbTest < BrieflyTest
 
   def test_the_umbrella_mounts_the_pack_under_db
     RailsDouble.with(root: Dir.pwd) do |_rails, _controller, model|
-      facade = Briefly.new { use Briefly::Rails }
+      facade = Briefly.define { use Briefly::Rails }
 
       result = facade.db.txn { :from_block }
 
@@ -132,7 +132,7 @@ class RailsDbTest < BrieflyTest
   def with_db
     model = RailsDouble::Model.new
     Object.const_set(:ApplicationRecord, model)
-    yield model, Briefly.new { namespace(:db) { use "rails/db" } }.db
+    yield model, Briefly.define { namespace(:db) { use "rails/db" } }.db
   ensure
     Object.send(:remove_const, :ApplicationRecord) if Object.const_defined?(:ApplicationRecord, false)
   end

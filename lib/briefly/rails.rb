@@ -7,7 +7,7 @@ require "briefly/rails/reload"
 module Briefly
   # Shortcut pack for Rails applications.
   #
-  #   App = Briefly.new { use Briefly::Rails }
+  #   App = Briefly.define { use Briefly::Rails }
   #   App.c            # => Rails.configuration
   #   App.render(...)  # => ApplicationController.renderer.render(...)
   #   App.db.txn { }   # => ApplicationRecord.transaction { }
@@ -15,7 +15,7 @@ module Briefly
   # An umbrella over {Config}, {Env}, {View} and {Reload}, plus {DB} under the +db+ namespace. Each is
   # a pack in its own right, so a facade can take only the parts it wants:
   #
-  #   Admin = Briefly.new do
+  #   Admin = Briefly.define do
   #     use "rails/env"
   #     namespace(:primary) { use "rails/db" }
   #   end

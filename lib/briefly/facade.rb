@@ -3,7 +3,7 @@
 require "monitor"
 
 module Briefly
-  # The object returned by {Briefly.new}. Shortcuts are compiled onto its singleton class as real
+  # The object returned by {Briefly.define}. Shortcuts are compiled onto its singleton class as real
   # methods, so +respond_to?+, console tab-completion and test stubbing all work unaided.
   #
   # Memo store: reads are lock-free against a frozen snapshot hash; writes swap in a new frozen hash

@@ -3,9 +3,17 @@
 require "test_helper"
 
 class CoreTest < BrieflyTest
-  def test_new_returns_independent_facades
-    a = Briefly.new { shortcut(:only_a) { 1 } }
-    b = Briefly.new { shortcut(:only_b) { 2 } }
+  # +Briefly+ is a module, so it inherits no +new+ from +Module+: removing the method is the whole
+  # deprecation. There is no silent-wrong-behavior path left behind. This is the only +Briefly.new+
+  # left in the tree, and it is here to prove there is nothing behind it.
+  def test_the_old_new_entry_point_no_longer_exists
+    refute_respond_to Briefly, :new
+    assert_raises(NoMethodError) { Briefly.new { shortcut(:x) { 1 } } }
+  end
+
+  def test_define_returns_independent_facades
+    a = Briefly.define { shortcut(:only_a) { 1 } }
+    b = Briefly.define { shortcut(:only_b) { 2 } }
 
     refute_same a, b
     refute a.shortcut?(:only_b)
@@ -13,14 +21,14 @@ class CoreTest < BrieflyTest
   end
 
   def test_empty_facade_is_valid
-    facade = Briefly.new
+    facade = Briefly.define
 
     assert_empty facade.shortcuts
     refute facade.shortcut?(:anything)
   end
 
   def test_shortcuts_are_sorted_canonical_names_only
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:zeta) { 1 }
       shortcut(:alpha, :a) { 2 }
     end
@@ -29,7 +37,7 @@ class CoreTest < BrieflyTest
   end
 
   def test_shortcut_predicate_accepts_canonical_and_alias
-    facade = Briefly.new { shortcut(:config, :c) { 1 } }
+    facade = Briefly.define { shortcut(:config, :c) { 1 } }
 
     assert facade.shortcut?(:config)
     assert facade.shortcut?(:c)
@@ -37,14 +45,14 @@ class CoreTest < BrieflyTest
   end
 
   def test_configure_adds_shortcuts_to_an_existing_facade
-    facade = Briefly.new
+    facade = Briefly.define
     facade.configure { shortcut(:late) { :added } }
 
     assert_equal :added, facade.late
   end
 
   def test_configure_returns_the_facade
-    facade = Briefly.new
+    facade = Briefly.define
 
     result = facade.configure { shortcut(:x) { 1 } }
 
@@ -53,7 +61,7 @@ class CoreTest < BrieflyTest
 
   def test_configure_preserves_existing_definitions_and_memoization
     calls = 0
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:cached) { calls += 1 }
       memoize :cached
     end
@@ -68,7 +76,7 @@ class CoreTest < BrieflyTest
 
   def test_configure_can_memoize_a_previously_declared_shortcut
     calls = 0
-    facade = Briefly.new { shortcut(:cached) { calls += 1 } }
+    facade = Briefly.define { shortcut(:cached) { calls += 1 } }
     facade.configure { memoize :cached }
 
     facade.cached
@@ -78,7 +86,7 @@ class CoreTest < BrieflyTest
   end
 
   def test_configure_preserves_previously_registered_handlers
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(RuntimeError, :boom) { :rescued }
     end
@@ -90,7 +98,7 @@ class CoreTest < BrieflyTest
   # A builder pass that raises in compile! must leave the live facade exactly as it was.
   def test_a_raising_configure_does_not_memoize_the_facade
     calls = 0
-    facade = Briefly.new { shortcut(:value) { calls += 1 } }
+    facade = Briefly.define { shortcut(:value) { calls += 1 } }
 
     assert_raises(Briefly::Error) do
       facade.configure do
@@ -107,7 +115,7 @@ class CoreTest < BrieflyTest
   end
 
   def test_a_raising_configure_does_not_steal_an_alias
-    facade = Briefly.new { shortcut(:config, :c) { :value } }
+    facade = Briefly.define { shortcut(:config, :c) { :value } }
 
     assert_raises(Briefly::Error) do
       facade.configure do
@@ -123,7 +131,7 @@ class CoreTest < BrieflyTest
   end
 
   def test_inspect_lists_shortcut_names_and_hides_memo_internals
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:secret) { "s3cr3t" }
       memoize :secret
     end

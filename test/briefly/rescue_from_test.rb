@@ -18,7 +18,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_handler_return_value_becomes_the_shortcut_value
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError, :boom) { "unknown" }
     end
@@ -27,7 +27,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_handler_receives_the_error_and_the_shortcut_name
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError, :boom) { |error, name| [error.message, name] }
     end
@@ -36,7 +36,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_handler_may_take_only_the_error
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError, :boom) { |error| error.message }
     end
@@ -47,7 +47,7 @@ class RescueFromTest < BrieflyTest
   # A handler is `call`ed, not `instance_exec`'d: unlike a shortcut body it is not bound to the
   # facade, so it cannot reach shortcuts by bare name.
   def test_a_handler_is_not_bound_to_the_facade
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:logger) { :facade_logger }
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError, :boom) { self }
@@ -57,7 +57,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_a_reraising_handler_propagates
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError, :boom) { |error| raise error }
     end
@@ -69,7 +69,7 @@ class RescueFromTest < BrieflyTest
   # `$!`, which stays set only because the handler is called from inside `__call`'s rescue body.
   def test_a_handler_can_bare_raise_to_rethrow_the_original
     raise_line = nil
-    facade = Briefly.new do
+    facade = Briefly.define do
       raise_line = __LINE__ + 1
       shortcut(:boom) { raise ArgumentError, "kaboom" }
       rescue_from(StandardError) { raise }
@@ -83,13 +83,13 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_an_unhandled_error_propagates_unchanged
-    facade = Briefly.new { shortcut(:boom) { raise ArgumentError, "kaboom" } }
+    facade = Briefly.define { shortcut(:boom) { raise ArgumentError, "kaboom" } }
 
     assert_equal "kaboom", assert_raises(ArgumentError) { facade.boom }.message
   end
 
   def test_errors_outside_standard_error_always_propagate
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise NotStandard }
       rescue_from(Exception, :boom) { :never }
     end
@@ -98,7 +98,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_subclasses_match
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise ArgumentError }
       rescue_from(StandardError, :boom) { :caught }
     end
@@ -107,7 +107,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_a_narrower_class_does_not_match_a_wider_error
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(ArgumentError, :boom) { :never }
     end
@@ -116,7 +116,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_scoping_to_other_shortcuts_does_not_apply
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       shortcut(:fine) { :fine }
       rescue_from(StandardError, :fine) { :never }
@@ -126,7 +126,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_names_may_be_given_as_an_array
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:a) { raise "a" }
       shortcut(:b) { raise "b" }
       rescue_from(StandardError, %i[a b]) { |error| error.message }
@@ -137,7 +137,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_names_may_be_aliases
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:config, :c) { raise "kaboom" }
       rescue_from(StandardError, :c) { :caught }
     end
@@ -146,7 +146,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_last_registered_wins_within_a_level
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError, :boom) { :first }
       rescue_from(StandardError, :boom) { :second }
@@ -156,7 +156,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_facade_scoped_beats_facade_wide_regardless_of_order
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError, :boom) { :scoped }
       rescue_from(StandardError) { :wide }
@@ -167,7 +167,7 @@ class RescueFromTest < BrieflyTest
 
   def test_facade_wide_beats_global
     Briefly.rescue_from(StandardError) { :global }
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError) { :wide }
     end
@@ -177,15 +177,15 @@ class RescueFromTest < BrieflyTest
 
   def test_global_applies_when_the_facade_has_no_match
     Briefly.rescue_from(StandardError) { :global }
-    facade = Briefly.new { shortcut(:boom) { raise "kaboom" } }
+    facade = Briefly.define { shortcut(:boom) { raise "kaboom" } }
 
     assert_equal :global, facade.boom
   end
 
   def test_global_handlers_are_shared_by_every_facade
     Briefly.rescue_from(StandardError) { :global }
-    one = Briefly.new { shortcut(:boom) { raise "kaboom" } }
-    two = Briefly.new { shortcut(:boom) { raise "kaboom" } }
+    one = Briefly.define { shortcut(:boom) { raise "kaboom" } }
+    two = Briefly.define { shortcut(:boom) { raise "kaboom" } }
 
     assert_equal :global, one.boom
     assert_equal :global, two.boom
@@ -194,7 +194,7 @@ class RescueFromTest < BrieflyTest
   # `{}` binds to the nearest token, so `rescue_from StandardError { }` calls a method named
   # `StandardError`. These two forms are the supported ones; both must bind to `rescue_from`.
   def test_do_end_form_binds_the_block
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from StandardError, :boom do |error|
         error.message
@@ -205,7 +205,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_parens_and_braces_form_binds_the_block
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
       rescue_from(StandardError, :boom) { |error| error.message }
     end
@@ -217,7 +217,7 @@ class RescueFromTest < BrieflyTest
     # eval of a hardcoded literal: the point is to observe how Ruby *parses* this form. Written
     # inline it would be a call to a method named `StandardError`, which this asserts.
     assert_raises(NoMethodError) do
-      Briefly.new do
+      Briefly.define do
         shortcut(:boom) { raise "kaboom" }
         eval("rescue_from StandardError { |e| e }", binding, __FILE__, __LINE__)
       end
@@ -226,7 +226,7 @@ class RescueFromTest < BrieflyTest
 
   def test_error_class_must_come_first
     error = assert_raises(ArgumentError) do
-      Briefly.new do
+      Briefly.define do
         shortcut(:boom) { raise "kaboom" }
         rescue_from(:boom, StandardError) { :never }
       end
@@ -237,7 +237,7 @@ class RescueFromTest < BrieflyTest
 
   def test_requires_a_block
     assert_raises(ArgumentError) do
-      Briefly.new do
+      Briefly.define do
         shortcut(:boom) { raise "kaboom" }
         rescue_from(StandardError, :boom)
       end
@@ -245,7 +245,7 @@ class RescueFromTest < BrieflyTest
   end
 
   def test_unknown_shortcut_name_raises
-    assert_raises(Briefly::UnknownShortcutError) { Briefly.new { rescue_from(StandardError, :nope) { :never } } }
+    assert_raises(Briefly::UnknownShortcutError) { Briefly.define { rescue_from(StandardError, :nope) { :never } } }
   end
 
   def test_global_rescue_from_validates_its_arguments
@@ -259,7 +259,7 @@ class RescueFromTest < BrieflyTest
 
   # Briefly's own dispatch failures must never be laundered into a user's fallback.
   def test_an_internal_lookup_failure_is_not_handled
-    facade = Briefly.new do
+    facade = Briefly.define do
       shortcut(:ok) { :ok }
       rescue_from(StandardError) { :swallowed }
     end

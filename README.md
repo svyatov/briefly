@@ -16,7 +16,7 @@ console tab-completion and test stubbing all just work.
 
 ```ruby
 # config/initializers/app.rb
-App = Briefly.new do
+App = Briefly.define do
   use Briefly::Rails
   shortcut(:redis) { REDIS_POOL }
 end
@@ -39,19 +39,19 @@ autoloaded only when you name it.
 
 ## Core concepts
 
-A **facade** is the object `Briefly.new` returns. You assign it to a constant of your choosing;
+A **facade** is the object `Briefly.define` returns. You assign it to a constant of your choosing;
 `briefly` never installs one for you. Multiple independent facades share no state:
 
 ```ruby
-App   = Briefly.new { use Briefly::Rails }
-Admin = Briefly.new { shortcut(:audit_log) { AuditLog } }
+App   = Briefly.define { use Briefly::Rails }
+Admin = Briefly.define { shortcut(:audit_log) { AuditLog } }
 ```
 
 A **shortcut** is a name plus a body. The body is always attached to `shortcut` — one block, one
 place — and runs bound to the facade, so it can reach the facade's other shortcuts:
 
 ```ruby
-Briefly.new do
+Briefly.define do
   shortcut(:config, :c) { Rails.configuration }   # `:c` is an alias
   shortcut(:timeout)    { config.x.timeout }      # bodies see other shortcuts
   shortcut(:ready?)     { !timeout.nil? }         # `?` and `!` names are fine
@@ -67,7 +67,7 @@ overrides it silently — that is how you override a pack's shortcut.
 Annotate an already-declared shortcut by name, on its own line:
 
 ```ruby
-Briefly.new do
+Briefly.define do
   shortcut(:catalog) { Catalog.load_from_disk }
   memoize :catalog
 end
@@ -105,7 +105,7 @@ Error class first, shortcut names optional and trailing. The handler's **return 
 shortcut's return value**:
 
 ```ruby
-Briefly.new do
+Briefly.define do
   use Briefly::Rails
   shortcut(:redis) { REDIS_POOL }
   rescue_from(Redis::BaseError, :redis) { |e| Sentry.capture_exception(e); nil }
@@ -168,7 +168,7 @@ No match → the error propagates.
 `namespace` groups shortcuts behind a name, so the root keyspace stays yours:
 
 ```ruby
-App = Briefly.new do
+App = Briefly.define do
   shortcut(:redis) { REDIS_POOL }
 
   namespace :db do
@@ -215,7 +215,7 @@ module RedisPack
   end
 end
 
-Api = Briefly.new { use RedisPack }
+Api = Briefly.define { use RedisPack }
 ```
 
 Packs may `use` other packs, and may reach `builder.facade` to wire lifecycle hooks — that is
@@ -235,7 +235,7 @@ module RedisPack
   end
 end
 
-Api = Briefly.new { use RedisPack, url: "redis://cache:6379" }
+Api = Briefly.define { use RedisPack, url: "redis://cache:6379" }
 ```
 
 ### Short names
@@ -247,7 +247,7 @@ inflection and no path guessing — the registry is the only source of truth:
 Briefly.register("myapp/redis", RedisPack)          # a pack object
 Briefly.register("myapp/redis", "MyApp::RedisPack") # or a constant path, resolved on first use
 
-Api = Briefly.new { use "myapp/redis", url: "redis://cache:6379" }
+Api = Briefly.define { use "myapp/redis", url: "redis://cache:6379" }
 ```
 
 An unregistered name raises `Briefly::UnknownPackError`. The packs this gem ships are registered as
@@ -282,7 +282,7 @@ It still composes `Briefly::Rails::Reload`, because *your* memoized shortcuts ne
 Need a custom renderer? Override it — last declaration wins:
 
 ```ruby
-App = Briefly.new do
+App = Briefly.define do
   use Briefly::Rails
   shortcut(:renderer) { ApplicationController.renderer.new(http_host: x.domain, https: !development?) }
 end
@@ -298,7 +298,7 @@ end
 | `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `query` |
 
 ```ruby
-Worker = Briefly.new do
+Worker = Briefly.define do
   use "rails/env"
   use "rails/reload"
   namespace(:db) { use "rails/db" }
@@ -314,7 +314,7 @@ end
 | `query` | | `base.with_connection { \|c\| c.exec_query(sql) }` |
 
 ```ruby
-App = Briefly.new do
+App = Briefly.define do
   use Briefly::Rails
   namespace(:db2) { use "rails/db", base: "SecondaryApplicationRecord" }
 end
@@ -352,7 +352,7 @@ The pack memoizes nothing and wires no lifecycle hook, so it works without a boo
 memoizes objects holding on to reloadable application classes:
 
 ```ruby
-Admin = Briefly.new do
+Admin = Briefly.define do
   use Briefly::Rails::Reload
   shortcut(:policy) { Admin::Policy.new }
   memoize :policy
@@ -391,7 +391,7 @@ globally registered handlers.
 ## Types
 
 `briefly` ships RBS signatures in [`sig/`](sig). Shortcuts are compiled at runtime, so **RBS cannot
-see them** — `Briefly.new`, `Facade`'s lifecycle API and the `Builder` DSL are fully typed, but
+see them** — `Briefly.define`, `Facade`'s lifecycle API and the `Builder` DSL are fully typed, but
 `App.config` is invisible to Steep. Declare the ones you rely on in your own `sig/`:
 
 ```rbs
@@ -420,7 +420,7 @@ module App
 end
 
 # after
-App = Briefly.new do
+App = Briefly.define do
   use Briefly::Rails
   shortcut(:redis) { REDIS_POOL }
   memoize :redis

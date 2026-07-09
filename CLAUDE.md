@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 briefly builds a terse facade over an application's most reached-for objects — `App.config`,
-`App.render`, `App.logger`. `Briefly.new { ... }` returns a `Facade` whose shortcuts are compiled
+`App.render`, `App.logger`. `Briefly.define { ... }` returns a `Facade` whose shortcuts are compiled
 onto its singleton class as **real methods**, so `respond_to?`, console tab-completion and test
 stubbing all work unaided. There is no `method_missing` anywhere, and the gem has **zero runtime
 dependencies**. Rails support lives in an optional, autoloaded pack.
