@@ -1,0 +1,4 @@
+# Standard-library signatures these RBS files reference. Consumers' RBS/Steep load these
+# automatically when they depend on briefly. (The gem has no runtime gem dependencies.)
+dependencies:
+  - name: monitor # Facade's reentrant memo lock

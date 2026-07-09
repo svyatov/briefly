@@ -1,0 +1,36 @@
+module Briefly
+  # The object returned by `Briefly.new`. Shortcuts are compiled onto its singleton class as real
+  # methods; RBS cannot see them, so they do not appear here.
+  class Facade
+    # Names a shortcut may not take.
+    RESERVED: Array[Symbol]
+
+    # Prefix of the private singleton methods holding compiled shortcut bodies.
+    BODY_PREFIX: String
+
+    @__defs: Hash[Symbol, Definition]
+    @__aliases: Hash[Symbol, Symbol]
+    @__memos: Hash[Symbol, untyped]
+    @__monitor: Monitor
+    @__errors: ErrorRegistry
+    @__public: Array[Symbol]
+
+    def initialize: () -> void
+    def shortcuts: () -> Array[Symbol]
+    def shortcut?: (Symbol name) -> bool
+    def clear_memos!: () -> self
+    def reset!: () -> self
+    def configure: () ?{ (?) [self: Builder] -> void } -> self
+    def inspect: () -> String
+    def to_s: () -> String
+
+    private
+
+    def __install: (Hash[Symbol, Definition] defs, Array[[ Class, Array[Symbol]?, Briefly::handler ]] error_entries) -> self
+    def __remove_methods: (Array[Symbol] names) -> void
+    def __define: (Definition defn) -> void
+    def __call: (Symbol name, *untyped, **untyped) ?{ (?) -> untyped } -> untyped
+    def __memo: (Symbol name) { () -> untyped } -> untyped
+    def __handle: (StandardError error, Symbol name) -> untyped
+  end
+end

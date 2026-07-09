@@ -1,0 +1,8 @@
+module Briefly
+  # Shortcut pack for Rails applications. Loaded only when `Briefly::Rails` is referenced.
+  #
+  # Only `install` is public; the per-group installers are private class methods.
+  module Rails
+    def self?.install: (Builder builder) -> Builder
+  end
+end

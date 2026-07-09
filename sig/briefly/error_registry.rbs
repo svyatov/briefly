@@ -1,0 +1,22 @@
+module Briefly
+  # An ordered list of `rescue_from` registrations, queried at dispatch time.
+  class ErrorRegistry
+    # A single registration. `names` is nil for facade-wide/global handlers.
+    class Entry < ::Struct[untyped]
+      attr_accessor klass: Class
+      attr_accessor names: Array[Symbol]?
+      attr_accessor handler: Briefly::handler
+
+      def self.new: (Class klass, Array[Symbol]? names, Briefly::handler handler) -> Entry
+    end
+
+    @entries: Array[Entry]
+    @mutex: Thread::Mutex
+
+    def initialize: () -> void
+    def add: (Class klass, Array[Symbol]? names, Briefly::handler handler) -> self
+    def scoped: (Symbol name) -> Array[Entry]
+    def wide: () -> Array[Entry]
+    def clear: () -> self
+  end
+end

@@ -1,0 +1,35 @@
+# A terse, curated facade over an application's most frequently reached-for objects.
+module Briefly
+  VERSION: String
+
+  # Distinguishes "not memoized yet" from a memoized `nil`.
+  UNSET: Object
+
+  # Base class for every error raised by Briefly.
+  class Error < StandardError
+  end
+
+  # Raised when `memoize` or `rescue_from` names a shortcut that does not exist.
+  class UnknownShortcutError < Error
+  end
+
+  # Raised when a shortcut name or alias would shadow a facade method.
+  class ReservedNameError < Error
+  end
+
+  # A recovery block. Its return value becomes the shortcut's return value.
+  type handler = ^(StandardError error, Symbol shortcut_name) -> untyped
+
+  # A pack is any object responding to `#install(builder)`.
+  interface _Pack
+    def install: (Builder builder) -> untyped
+  end
+
+  self.@errors: ErrorRegistry
+
+  # Shortcuts are compiled at runtime, so RBS cannot see them. Declare the ones you rely on in
+  # your own `sig/`, e.g. `App: Briefly::Facade` plus `def App.config: () -> untyped`.
+  def self.new: () ?{ (?) [self: Builder] -> void } -> Facade
+  def self.rescue_from: (Class error_class) { (StandardError, Symbol) -> untyped } -> Module
+  def self.errors: () -> ErrorRegistry
+end

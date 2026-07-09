@@ -1,0 +1,23 @@
+module Briefly
+  # Receives the DSL. Blocks are `instance_eval`'d here, never on the facade.
+  class Builder
+    @facade: Facade
+    @defs: Hash[Symbol, Definition]
+    @errors: Array[[ Class, Array[Symbol]?, Briefly::handler ]]
+
+    attr_reader facade: Facade
+
+    def initialize: (Facade facade, Hash[Symbol, Definition] defs) -> void
+    def use: (_Pack pack) -> self
+    def shortcut: (Symbol canonical, *Symbol aliases) { (?) [self: Facade] -> untyped } -> Symbol
+    def memoize: (Symbol name, **untyped opts) -> Symbol
+    def rescue_from: (Class error_class, *(Symbol | Array[Symbol]) names) { (StandardError, Symbol) -> untyped } -> self
+    def compile!: () -> [ Hash[Symbol, Definition], Array[[ Class, Array[Symbol]?, Briefly::handler ]] ]
+
+    private
+
+    def validate_name!: (untyped name) -> void
+    def purge: (Array[Symbol] names, except: Symbol) -> void
+    def fetch: (Symbol name) -> Definition
+  end
+end

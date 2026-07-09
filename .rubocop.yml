@@ -1,0 +1,49 @@
+plugins:
+  - rubocop-minitest
+
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: enable
+  SuggestExtensions: false
+
+Style/Documentation:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+Layout/LineLength:
+  Max: 120
+
+# Compiling shortcuts onto a singleton class is inherently branchy; the methods are small and named.
+Metrics/AbcSize:
+  Exclude:
+    - "lib/briefly/facade.rb"
+    - "test/**/*"
+
+Metrics/MethodLength:
+  Max: 15
+  Exclude:
+    - "test/**/*"
+
+Metrics/BlockLength:
+  Exclude:
+    - "test/**/*"
+
+Metrics/ClassLength:
+  Exclude:
+    - "test/**/*"
+
+Minitest/MultipleAssertions:
+  Max: 20
+
+# `rescue_from`'s handler is called with (error, name); `&:message` would pass the name as an
+# argument to #message. The block form is the only correct one.
+Style/SymbolProc:
+  AllowedMethods:
+    - respond_to
+    - define_method
+    - rescue_from

@@ -1,0 +1,17 @@
+module Briefly
+  # One shortcut declaration: its canonical name, its aliases, its body, and whether it memoizes.
+  class Definition
+    attr_reader canonical: Symbol
+    attr_reader aliases: Array[Symbol]
+    attr_reader body: Proc
+    attr_reader raw_name: Symbol
+
+    @memoized: bool
+
+    def initialize: (Symbol canonical, Array[Symbol] aliases, Proc body) -> void
+    def initialize_copy: (Definition other) -> void
+    def memoize!: () -> void
+    def memoized?: () -> bool
+    def names: () -> Array[Symbol]
+  end
+end
