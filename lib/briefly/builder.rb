@@ -12,19 +12,60 @@ module Briefly
     # @api private
     # @param facade [Briefly::Facade]
     # @param defs [Hash{Symbol => Briefly::Definition}] copies of the facade's current definitions
-    def initialize(facade, defs)
+    # @param children [Hash{Symbol => Briefly::Facade}] the facade's namespaces, by name
+    def initialize(facade, defs, children)
       @facade = facade
       @defs = defs
+      @children = children
       @errors = []
+      @pending = {}
     end
 
-    # Applies a pack: any object responding to +#install(builder)+.
+    # Applies a pack: any object responding to +#install(builder)+, or a name {Briefly.register}'d for
+    # one. Any keywords are forwarded to the pack's +install+. Ruby drops an empty +**+ splat, so a
+    # pack taking no options needs no keyword parameter.
     #
-    # @param pack [#install]
+    #   use Briefly::Rails::DB, base: "SecondaryApplicationRecord"
+    #   use "rails/db", base: "SecondaryApplicationRecord"
+    #
+    # @param pack [#install, String, Symbol]
     # @return [self]
-    def use(pack)
-      pack.install(self)
+    # @raise [Briefly::UnknownPackError] if +pack+ is a name that is not registered
+    def use(pack, **)
+      pack = Briefly.pack(pack) unless pack.respond_to?(:install)
+      pack.install(self, **)
       self
+    end
+
+    # Declares a namespace: a shortcut returning a child facade, so +App.db.query+ works. The block is
+    # the child's own DSL — +shortcut+, +memoize+, +use+, +rescue_from+, and further namespaces.
+    #
+    # The child is created once and reused by later passes, so its memos survive +configure+.
+    # {Briefly::Facade#clear_memos!} cascades into it. Two limits, both deliberate: a child body cannot
+    # reach a root shortcut by bare name, and a root +rescue_from+ does not scope into the child.
+    #
+    # The child's pass is *collected*, not run: its builder is held until {#compile!} has validated the
+    # whole tree, so a later failure in this pass cannot leave an already-reachable child mutated. One
+    # builder per name, so a second +namespace(:db)+ in the same pass extends the first rather than
+    # replacing it.
+    #
+    # @param name [Symbol] the shortcut the child answers to
+    # @yield [] evaluated against the child's {Briefly::Builder}
+    # @return [Symbol] +name+
+    # @raise [Briefly::ReservedNameError] if +name+ shadows a facade method
+    def namespace(name, &block)
+      raise ArgumentError, "namespace(#{name.inspect}) requires a block" unless block
+
+      validate_name!(name)
+      child = @children[name] || Facade.new
+      pending = @pending[name] || child.send(:__prepare)
+      pending.instance_eval(&block)
+      # Routes through `shortcut` for purge and validation, which drops the child this call just
+      # resolved — so re-register both afterwards. An external `shortcut(name)` gets no such reprieve.
+      shortcut(name) { child }
+      @children[name] = child
+      @pending[name] = pending
+      name
     end
 
     # Declares a shortcut. Redeclaring a name (canonical or alias) silently overrides it.
@@ -78,10 +119,12 @@ module Briefly
       self
     end
 
-    # Validates everything collected in this pass. {Briefly::Facade#configure} installs the result.
+    # Validates everything collected in this pass, and recursively every namespace pass it collected.
+    # {Briefly::Facade#configure} installs the result. Validation of the whole tree finishes before any
+    # of it is installed.
     #
     # @api private
-    # @return [Array] +[definitions, error_entries]+
+    # @return [Array] +[definitions, error_entries, children, child_plans]+
     # @raise [Briefly::Error] if a memoized shortcut's body takes arguments
     def compile!
       @defs.each_value do |defn|
@@ -90,7 +133,7 @@ module Briefly
 
         raise Error, "cannot memoize #{defn.canonical}: its body takes arguments"
       end
-      [@defs, @errors]
+      [@defs, @errors, @children, @pending.map { |name, builder| [@children[name], builder.compile!] }]
     end
 
     private
@@ -108,6 +151,11 @@ module Briefly
     def purge(names, except:)
       @defs.delete_if { |canonical, _| canonical != except && names.include?(canonical) }
       @defs.each_value { |defn| defn.aliases.replace(defn.aliases - names) }
+      # A namespace is just a shortcut returning its child, so redeclaring the name — as a canonical or
+      # as someone else's alias — must drop the child too. Keeping it would leave `clear_memos!` walking
+      # a facade nothing can reach. `except` gets no exemption: `namespace` re-registers its own child.
+      @children.delete_if { |name, _| names.include?(name) }
+      @pending.delete_if { |name, _| names.include?(name) }
     end
 
     def fetch(name)

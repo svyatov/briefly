@@ -20,6 +20,7 @@ module Briefly
       @__monitor = Monitor.new
       @__errors = ErrorRegistry.new
       @__public = [].freeze
+      @__children = {}
     end
 
     # @return [Array<Symbol>] canonical shortcut names, sorted; aliases excluded
@@ -29,25 +30,31 @@ module Briefly
     # @return [Boolean]
     def shortcut?(name) = @__defs.key?(name) || @__aliases.key?(name)
 
-    # Drops every memoized value. Thread-safe.
+    # Drops every memoized value, here and in every namespace. Thread-safe.
     #
     # @return [self]
     def clear_memos!
       @__monitor.synchronize { @__memos = {}.freeze }
+      # Each namespace owns its memo store and its own lock, so a child clears outside our monitor.
+      # One `Reload` on the root therefore clears the whole tree, including namespaces holding no pack.
+      @__children.each_value(&:clear_memos!)
       self
     end
     alias reset! clear_memos!
 
-    # Reopens the facade for another builder pass and recompiles. The builder starts from copies of
-    # the current definitions, so a pass that raises leaves the live facade untouched.
+    # Reopens the facade for another builder pass and recompiles. The builder starts from copies of the
+    # current definitions, so a pass that raises leaves the live facade — and every namespace under it
+    # — untouched.
     #
     # @yield [] evaluated against a {Briefly::Builder}
     # @return [self]
     def configure(&block)
-      builder = Builder.new(self, @__defs.transform_values(&:dup))
+      builder = __prepare
       builder.instance_eval(&block) if block
-      defs, error_entries = builder.compile!
-      __install(defs, error_entries)
+      # `compile!` validates the whole tree before `__commit` installs any of it. Splitting the two is
+      # what keeps a namespace pass atomic: `Builder#namespace` collects its child's pass rather than
+      # running it, so a later failure anywhere cannot leave an already-reachable child half-updated.
+      __commit(builder.compile!)
       self
     end
 
@@ -56,6 +63,23 @@ module Briefly
     alias to_s inspect
 
     private
+
+    # A builder seeded with copies of everything a pass may mutate. {Briefly::Builder#namespace} calls
+    # this on the child it collects.
+    #
+    # @return [Briefly::Builder]
+    def __prepare = Builder.new(self, @__defs.transform_values(&:dup), @__children.dup)
+
+    # Installs a validated pass, children first. Nothing here may raise: every check ran in +compile!+.
+    #
+    # @param plan [Array] +compile!+'s +[defs, error_entries, children, child_plans]+
+    # @return [self]
+    def __commit(plan)
+      defs, error_entries, children, child_plans = plan
+      child_plans.each { |child, child_plan| child.send(:__commit, child_plan) }
+      @__children = children
+      __install(defs, error_entries)
+    end
 
     # Compiles definitions onto the singleton class and appends error registrations.
     def __install(defs, error_entries)

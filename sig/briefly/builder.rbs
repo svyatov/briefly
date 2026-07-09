@@ -3,16 +3,21 @@ module Briefly
   class Builder
     @facade: Facade
     @defs: Hash[Symbol, Definition]
-    @errors: Array[[ Class, Array[Symbol]?, Briefly::handler ]]
+    @children: Hash[Symbol, Facade]
+    @errors: Array[Briefly::error_entry]
+
+    # One collected namespace pass per name, held until `compile!` has validated the whole tree.
+    @pending: Hash[Symbol, Builder]
 
     attr_reader facade: Facade
 
-    def initialize: (Facade facade, Hash[Symbol, Definition] defs) -> void
-    def use: (_Pack pack) -> self
+    def initialize: (Facade facade, Hash[Symbol, Definition] defs, Hash[Symbol, Facade] children) -> void
+    def use: (pack_ref pack, **untyped opts) -> self
+    def namespace: (Symbol name) { (?) [self: Builder] -> void } -> Symbol
     def shortcut: (Symbol canonical, *Symbol aliases) { (?) [self: Facade] -> untyped } -> Symbol
     def memoize: (Symbol name, **untyped opts) -> Symbol
     def rescue_from: (Class error_class, *(Symbol | Array[Symbol]) names) { (StandardError, Symbol) -> untyped } -> self
-    def compile!: () -> [ Hash[Symbol, Definition], Array[[ Class, Array[Symbol]?, Briefly::handler ]] ]
+    def compile!: () -> Briefly::plan
 
     private
 

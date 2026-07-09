@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Added
+- `namespace(name) { ... }` — groups shortcuts behind a child facade, so `App.db.query` works without burning root-level names. Takes the whole DSL, including nested namespaces. `clear_memos!` cascades into it. `configure` stays atomic across the whole tree: a pass that raises anywhere leaves the root and every namespace under it untouched. A `shortcut` of the same name overrides a namespace and drops the child.
+- `use` accepts keywords, forwarded to the pack's `install`, e.g. `use Briefly::Rails::DB, base: "SecondaryApplicationRecord"`.
+- `Briefly.register(name, pack)` and `Briefly.pack(name)` — a pack registry, so `use "rails/db"` works. Values may be a pack or a constant path resolved on first use. An unregistered name, or one naming a path that does not resolve, raises `Briefly::UnknownPackError`; a `NameError` raised *inside* a pack as it loads propagates untouched.
+- `Briefly::Rails::DB` — `connection`/`conn`, `transaction`/`txn`, `query`. `query` takes positional (`query(sql, 1)`) or named (`query(sql, id: 1)`) binds, and passes a bindless statement through unsanitized. Takes `base:` (default `"ApplicationRecord"`), resolved on every call so a reloaded class is never captured. Memoizes nothing and wires no lifecycle hook, so it works without a booted application.
+- `Briefly::Rails::Config`, `Briefly::Rails::Env` and `Briefly::Rails::View` — the umbrella pack's groups, now usable on their own.
+
+### Changed
+- `Briefly::Rails` mounts `Briefly::Rails::DB` under a new `db` namespace, so its shortcuts arrive as `App.db.*` rather than at the root. The umbrella now claims one further root-level name, `db`; declare your own `shortcut(:db)` *after* `use Briefly::Rails` to keep it.
+
 ## v0.1.0 (2026-07-09)
 
 ### Added

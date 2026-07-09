@@ -163,9 +163,46 @@ For a raised error, the first `is_a?` match wins, searching in this order:
 
 No match → the error propagates.
 
+## `namespace`
+
+`namespace` groups shortcuts behind a name, so the root keyspace stays yours:
+
+```ruby
+App = Briefly.new do
+  shortcut(:redis) { REDIS_POOL }
+
+  namespace :db do
+    shortcut(:pool) { ActiveRecord::Base.connection_pool }
+    memoize :pool
+  end
+end
+
+App.redis     # => REDIS_POOL
+App.db        # => #<Briefly::Facade shortcuts=[:pool]>
+App.db.pool   # => the pool
+```
+
+A namespace is a child `Briefly::Facade`, reached by a real method like any other shortcut — so
+`App.db` is a value you can pass around, and `App.db.pool` is not a `method_missing` trick. It takes
+the whole DSL: `shortcut`, `memoize`, `rescue_from`, `use`, and further namespaces.
+
+`clear_memos!` cascades, so one `Briefly::Rails::Reload` on the root clears the whole tree. The child
+is created once and reused, so its memos survive a later `configure`.
+
+`configure` is atomic across the whole tree: a pass that raises anywhere leaves the root and every
+namespace under it exactly as they were. Declaring `shortcut(:db)` over a `namespace(:db)` overrides
+it and drops the child.
+
+Two limits, both deliberate:
+
+- A child body cannot call a root shortcut by bare name. Namespaces are self-contained.
+- A root `rescue_from` does not scope into a child. Register handlers inside the namespace, or
+  globally with `Briefly.rescue_from`.
+
 ## Packs
 
-A pack is **any object responding to `#install(builder)`**. That's the whole protocol.
+A pack is **any object responding to `#install(builder, **opts)`**. That's the whole protocol. Options
+are optional: Ruby drops an empty `**` splat, so a pack taking none needs no keyword parameter.
 
 ```ruby
 module RedisPack
@@ -184,6 +221,38 @@ Api = Briefly.new { use RedisPack }
 Packs may `use` other packs, and may reach `builder.facade` to wire lifecycle hooks — that is
 exactly what `Briefly::Rails::Reload` does. The core stays framework-agnostic; packs do not have to.
 
+### Options
+
+Keywords passed to `use` reach the pack's `install`. Ruby drops an empty `**` splat, so a pack that
+takes no options needs no keyword parameter:
+
+```ruby
+module RedisPack
+  module_function
+
+  def install(builder, url: ENV.fetch("REDIS_URL"))
+    builder.shortcut(:redis) { ConnectionPool.new { Redis.new(url: url) } }
+  end
+end
+
+Api = Briefly.new { use RedisPack, url: "redis://cache:6379" }
+```
+
+### Short names
+
+`Briefly.register` maps a name to a pack, so `use` can take a string or symbol. There is no
+inflection and no path guessing — the registry is the only source of truth:
+
+```ruby
+Briefly.register("myapp/redis", RedisPack)          # a pack object
+Briefly.register("myapp/redis", "MyApp::RedisPack") # or a constant path, resolved on first use
+
+Api = Briefly.new { use "myapp/redis", url: "redis://cache:6379" }
+```
+
+An unregistered name raises `Briefly::UnknownPackError`. The packs this gem ships are registered as
+`"rails"`, `"rails/config"`, `"rails/env"`, `"rails/view"`, `"rails/db"` and `"rails/reload"`.
+
 ### `Briefly::Rails`
 
 | shortcut | aliases | value |
@@ -201,11 +270,14 @@ exactly what `Briefly::Rails::Reload` does. The core stays framework-agnostic; p
 | `renderer` | | `ApplicationController.renderer` |
 | `render` | | forwards to `renderer.render` |
 
+Plus `db`, a namespace holding `Briefly::Rails::DB`.
+
 Requires Rails >= 7.2. There is no `secrets` shortcut: `Rails.application.secrets` was removed in
 7.2. Use `credentials`.
 
 **Nothing in the pack is memoized.** `helpers`, `routes` and `renderer` are live lookups: Rails
 already caches them on objects it refreshes on reload, so caching them again would only go stale.
+It still composes `Briefly::Rails::Reload`, because *your* memoized shortcuts need clearing.
 
 Need a custom renderer? Override it — last declaration wins:
 
@@ -215,6 +287,64 @@ App = Briefly.new do
   shortcut(:renderer) { ApplicationController.renderer.new(http_host: x.domain, https: !development?) }
 end
 ```
+
+`Briefly::Rails` is an umbrella over four packs, each usable on its own:
+
+| pack | short name | shortcuts |
+|---|---|---|
+| `Briefly::Rails::Config` | `"rails/config"` | `config`, `config_x`, `root`, `cache`, `logger`, `credentials` |
+| `Briefly::Rails::Env` | `"rails/env"` | `env` and its predicates |
+| `Briefly::Rails::View` | `"rails/view"` | `helpers`, `routes`, `renderer`, `render` |
+| `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `query` |
+
+```ruby
+Worker = Briefly.new do
+  use "rails/env"
+  use "rails/reload"
+  namespace(:db) { use "rails/db" }
+end
+```
+
+### `Briefly::Rails::DB`
+
+| shortcut | aliases | value |
+|---|---|---|
+| `connection` | `conn` | `base.lease_connection` |
+| `transaction` | `txn` | forwards keywords and the block to `base.transaction` |
+| `query` | | `base.with_connection { \|c\| c.exec_query(sql) }` |
+
+```ruby
+App = Briefly.new do
+  use Briefly::Rails
+  namespace(:db2) { use "rails/db", base: "SecondaryApplicationRecord" }
+end
+
+App.db.txn { App.db.query("select * from users where id = ?", 1) }
+App.db2.conn
+```
+
+`query(sql, *binds)` sanitizes through `base.sanitize_sql_array` when binds are given, and passes the
+statement through untouched when they are not. Positional and named binds both work:
+
+```ruby
+App.db.query("select * from users where name like '%ada%'")          # no binds, passed through
+App.db.query("select * from users where id = ?", 123)                # positional
+App.db.query("select * from users where id = :id", id: 123)          # named
+```
+
+Binds are bound, never interpolated, so a value like `"x' OR '1'='1"` matches nothing. A bindless
+statement is deliberately *not* sanitized: `sanitize_sql_array` would fall through to its
+`statement % values` branch and raise on the literal `%` above.
+
+`query` uses `with_connection`, so the connection returns to the pool; `connection`/`conn`
+necessarily leases one.
+
+**Pass `base:` as a String, not the class.** A pack is `use`d from an initializer, where naming an
+autoloadable constant is what Rails warns about, and the captured class would go stale on the first
+code reload — permanently, since `Reload` clears memos, not closures. A `Module` is accepted for
+applications outside the autoloader, with that caveat.
+
+The pack memoizes nothing and wires no lifecycle hook, so it works without a booted application.
 
 ### `Briefly::Rails::Reload`
 

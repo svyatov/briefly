@@ -1,8 +1,30 @@
 module Briefly
   # Shortcut pack for Rails applications. Loaded only when `Briefly::Rails` is referenced.
   #
-  # Only `install` is public; the per-group installers are private class methods.
+  # An umbrella over `Config`, `Env`, `View` and `Reload`, plus `DB` under the `db` namespace. Each
+  # nested pack exposes `install` and nothing else.
   module Rails
     def self?.install: (Builder builder) -> Builder
+
+    # Configuration, paths and the application-wide singletons.
+    module Config
+      def self?.install: (Builder builder) -> Builder
+    end
+
+    # The environment and its predicates.
+    module Env
+      def self?.install: (Builder builder) -> Builder
+    end
+
+    # Helpers, routes and rendering outside a controller.
+    module View
+      def self?.install: (Builder builder) -> Builder
+    end
+
+    # One database, reached through one Active Record class. `base` is a constant path resolved on
+    # every call, so a reloaded class is never captured.
+    module DB
+      def self?.install: (Builder builder, ?base: String | Symbol | Module) -> Builder
+    end
   end
 end

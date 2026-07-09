@@ -29,4 +29,6 @@ class BrieflyTest < Minitest::Test
   def defs(facade) = facade.instance_variable_get(:@__defs)
 
   def memoized_names(facade) = defs(facade).select { |_name, defn| defn.memoized? }.keys
+
+  def children(facade) = facade.instance_variable_get(:@__children)
 end

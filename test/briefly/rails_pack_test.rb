@@ -69,10 +69,14 @@ class RailsPackTest < BrieflyTest
     end
   end
 
-  # Inside `Briefly::Rails`, a bare `Rails` resolves to the pack itself, not the framework.
+  # Inside `Briefly::Rails`, a bare `Rails` resolves to the pack itself, not the framework. Globbed,
+  # not listed: a new pack file must not be able to join the tree without joining this check.
   def test_the_pack_never_references_bare_framework_constants
-    %w[briefly/rails.rb briefly/rails/reload.rb].each do |file|
-      assert_empty bare_framework_refs(File.read(File.join(LIB, file))),
+    files = pack_sources
+
+    assert_operator files.size, :>=, 3, "the glob stopped seeing the pack files"
+    files.each do |file|
+      assert_empty bare_framework_refs(File.read(file)),
                    "#{file}: bare framework constant; must be `::Rails` / `::ApplicationController`"
     end
   end
@@ -93,7 +97,16 @@ class RailsPackTest < BrieflyTest
   end
 
   def test_only_install_is_public_on_the_pack
-    assert_equal %i[install], Briefly::Rails.singleton_methods(false)
+    [Briefly::Rails, Briefly::Rails::Config, Briefly::Rails::Env, Briefly::Rails::View].each do |pack|
+      assert_equal %i[install], pack.singleton_methods(false), pack.name
+    end
+  end
+
+  def test_the_mini_packs_install_independently
+    with_rails do |rails, _controller, _facade|
+      assert_equal [:env], Briefly.new { use "rails/env" }.shortcuts.grep(:env)
+      assert_same rails.configuration, Briefly.new { use Briefly::Rails::Config }.config
+    end
   end
 
   def test_an_app_can_override_a_pack_shortcut
@@ -104,7 +117,16 @@ class RailsPackTest < BrieflyTest
     end
   end
 
+  def test_the_glob_sees_every_pack_file
+    assert_includes pack_sources, File.join(LIB, "briefly/rails/db.rb")
+    assert_includes pack_sources, File.join(LIB, "briefly/rails/reload.rb")
+    assert_includes pack_sources, File.join(LIB, "briefly/rails.rb")
+  end
+
   private
+
+  # Globbed so a pack file added later cannot slip past `bare_framework_refs`.
+  def pack_sources = Dir[File.join(LIB, "briefly/rails.rb"), File.join(LIB, "briefly/rails/*.rb")].sort
 
   def with_rails(root: Dir.pwd, env: "test")
     RailsDouble.with(root: root, env: env) do |rails, controller|

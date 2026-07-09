@@ -19,9 +19,11 @@ Layout/LineLength:
   Max: 120
 
 # Compiling shortcuts onto a singleton class is inherently branchy; the methods are small and named.
+# A pack's `install` is counted the same way: every shortcut it declares is a send taking a block.
 Metrics/AbcSize:
   Exclude:
     - "lib/briefly/facade.rb"
+    - "lib/briefly/rails/db.rb"
     - "test/**/*"
 
 Metrics/MethodLength:

@@ -43,14 +43,21 @@ bundle exec rake release
 Four core files, each with one job:
 
 - `lib/briefly/definition.rb` — one shortcut declaration: canonical name, aliases, body, memoized flag
-- `lib/briefly/builder.rb` — receives the DSL (`shortcut`, `memoize`, `rescue_from`, `use`), collects
-  definitions, validates them in `compile!`
-- `lib/briefly/facade.rb` — compiles definitions onto its singleton class; owns the memo store and
-  error dispatch
+- `lib/briefly/builder.rb` — receives the DSL (`shortcut`, `memoize`, `rescue_from`, `use`,
+  `namespace`), collects definitions, validates them in `compile!`
+- `lib/briefly/facade.rb` — compiles definitions onto its singleton class; owns the memo store, the
+  namespace children and error dispatch
 - `lib/briefly/error_registry.rb` — `rescue_from` handlers, one instance per facade plus one global
 
-`lib/briefly/rails.rb` (autoloaded) and `lib/briefly/rails/reload.rb` are packs. A **pack** is any
-object responding to `#install(builder)` — that is the entire protocol.
+`lib/briefly/rails.rb` (autoloaded) is an umbrella over the packs nested in it — `Config`, `Env`,
+`View` — plus `lib/briefly/rails/db.rb` and `lib/briefly/rails/reload.rb`. A **pack** is any object
+responding to `#install(builder, **opts)` — that is the entire protocol. `Briefly.register` maps a
+short name to a pack or a constant path, so `use "rails/db"` resolves; the registry is the only
+source of truth, there is no inflection.
+
+A **namespace** is a child `Facade` reached by a real method, so `App.db.query` needs no
+`method_missing`. Children thread through `Builder.new(facade, defs, children)` and out of
+`compile!`, the same seam the definitions use.
 
 Signatures live in `sig/`. Shortcuts are compiled at runtime, so RBS cannot see them; `sig/` types
 the static surface only. There is no Steep target and no `rbs test` — CONTRIBUTING.md's **Types**
@@ -83,10 +90,38 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
 - **`__call` looks the definition up outside its own `rescue`.** An internal `KeyError` must never be
   laundered into a user's fallback.
 - **`Builder` deep-copies the facade's definitions.** A `configure` pass that raises must leave the
-  live facade exactly as it was — `Hash#dup` alone shares the `aliases` arrays.
+  live facade exactly as it was — `Hash#dup` alone shares the `aliases` arrays. The namespace children
+  hash is copied for the same reason: a pass that raises must not leave a new child reachable.
+- **`namespace` collects its child's pass, it does not run it.** `compile!` recurses to validate the
+  whole tree; only then does `__commit` install any of it, children first. Calling `child.configure`
+  inline instead commits eagerly, so a raise later in the parent's pass — or in a *sibling* namespace —
+  leaves an already-reachable child half-updated. Atomicity is tree-wide, not per-facade.
+- **One pending `Builder` per namespace name.** `namespace(:db)` twice in one pass must extend the child,
+  not replace it — that is how an app adds to a namespace a pack declared. A second `__prepare` would
+  snapshot the child's *committed* defs and drop the first block's work on commit.
+- **`namespace` reuses its child across passes.** A fresh `Facade.new` per `configure` would drop the
+  child's memos and orphan any `to_prepare` callback closed over the old child.
+- **`purge` drops children, and grants `except:` no exemption.** A namespace is a shortcut returning its
+  child, so redeclaring the name — canonical or as another shortcut's alias — must drop the child, or
+  `clear_memos!` keeps walking a facade nothing can reach. `namespace` re-registers its own child right
+  after its `shortcut` call; that is what the missing exemption is for. Exempting `except:` instead makes
+  the drop a no-op, since `shortcut(:db)` purges with `except: :db`.
+- **`clear_memos!` cascades into namespace children.** One `Reload` on the root clears the whole tree,
+  including a namespace holding no Rails pack. Without this, memoizing inside a namespace pins a value
+  across reloads, and no test but `test_clear_memos_cascades_into_namespaces` notices.
+- **`Briefly::Rails::DB#query` must not sanitize a bindless statement.** `sanitize_sql_array` falls
+  through to a `statement % values` branch that raises on any literal `%` — `... like '%ada%'`.
+- **`Briefly::Rails::DB#query`'s body takes no keyword parameter.** Accepting none is what makes Ruby
+  pack `query(sql, id: 1)` into `binds` as a trailing Hash, which is how named binds reach
+  `sanitize_sql_array`. A `**opts` would swallow them and send the statement to the database unbound.
+- **`Briefly::Rails::DB` uses `lease_connection` / `with_connection`, never `connection`.** The latter
+  is soft-deprecated and raises under `ActiveRecord.permanent_connection_checkout = :disallowed`.
 - **Inside `lib/briefly/rails*.rb` the framework is always `::Rails`.** Bare `Rails` resolves to
   `Briefly::Rails`. `test/briefly/rails_pack_test.rb` lexes the source to enforce this, and has
-  fixture tests proving the check bites.
+  fixture tests proving the check bites. It globs the pack files rather than listing them, so a new
+  pack file cannot join the tree without joining the check.
+- **Every shipped pack is registered as a constant path String, never the constant.** Naming
+  `Briefly::Rails::DB` in the `@packs` table would resolve it at load and defeat `autoload :Rails`.
 
 ## Testing
 

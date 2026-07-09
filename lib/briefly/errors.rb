@@ -10,6 +10,9 @@ module Briefly
   # Raised when a shortcut name or alias would shadow a facade method.
   class ReservedNameError < Error; end
 
+  # Raised when +use+ names a pack that is not registered.
+  class UnknownPackError < Error; end
+
   # Sentinel distinguishing "not memoized yet" from a memoized +nil+.
   UNSET = Object.new.freeze
 end
