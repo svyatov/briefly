@@ -5,6 +5,18 @@ require "test_helper"
 class RescueFromTest < BrieflyTest
   class NotStandard < Exception; end # rubocop:disable Lint/InheritException
 
+  # ErrorRegistry#add without its mutex. Scale alone does not surface the lost update reliably --
+  # 8x500 against the unguarded registry loses nothing in 20 runs -- so the read/write window is held
+  # open explicitly. Without this fixture the guard below cannot fail, and pins nothing.
+  class UnguardedRegistry < Briefly::ErrorRegistry
+    def add(klass, names, handler)
+      snapshot = @entries
+      Thread.pass
+      @entries = [*snapshot, Entry.new(klass, names&.freeze, handler)].freeze
+      self
+    end
+  end
+
   def test_handler_return_value_becomes_the_shortcut_value
     facade = Briefly.new do
       shortcut(:boom) { raise "kaboom" }
@@ -261,5 +273,31 @@ class RescueFromTest < BrieflyTest
     threads.each(&:join)
 
     assert_equal 4000, Briefly.errors.wide.size
+  end
+
+  def test_an_unguarded_registry_really_does_lose_concurrent_registrations
+    registry = UnguardedRegistry.new
+    threads = 4.times.map { Thread.new { 50.times { registry.add(StandardError, nil, proc { :x }) } } }
+    threads.each(&:join)
+
+    assert_operator registry.wide.size, :<, 200,
+                    "the fixture must lose entries, otherwise the guard above proves nothing"
+  end
+
+  # The test above proves a lost update is detectable; it cannot prove #add still guards against one,
+  # because the race almost never fires at a scale a suite can afford. Pin the mutex directly: hold it,
+  # and #add must block. Delete the synchronize in error_registry.rb and this goes red.
+  def test_add_holds_the_mutex_while_rebinding_entries
+    registry = Briefly::ErrorRegistry.new
+    mutex = registry.instance_variable_get(:@mutex)
+    mutex.lock
+    writer = Thread.new { registry.add(StandardError, nil, proc { :x }) }
+    Thread.pass until writer.status == "sleep" || !writer.alive?
+    blocked = writer.alive?
+    mutex.unlock
+    writer.join
+
+    assert blocked, "#add must hold @mutex while rebinding @entries"
+    assert_equal 1, registry.wide.size
   end
 end

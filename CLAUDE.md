@@ -89,6 +89,13 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   raises before `__call` is entered.
 - **`__call` looks the definition up outside its own `rescue`.** An internal `KeyError` must never be
   laundered into a user's fallback.
+- **`ErrorRegistry#add` rebinds `@entries` under the mutex.** `[*@entries, entry]` is a read, a build
+  and an assign; two threads that read the same array each write their own successor, and the loser's
+  handlers vanish — not one entry, but everything it appended since its snapshot. Reads stay lock-free
+  against the frozen array; only writers serialize. Scale alone does not pin this: with the
+  `synchronize` deleted, 4,000 concurrent registrations lost nothing in 20 runs, because MRI rarely
+  preempts inside so short a window. `test_add_holds_the_mutex_while_rebinding_entries` asserts the
+  exclusion directly instead of racing for it.
 - **`Builder` deep-copies the facade's definitions.** A `configure` pass that raises must leave the
   live facade exactly as it was — `Hash#dup` alone shares the `aliases` arrays. The namespace children
   hash is copied for the same reason: a pass that raises must not leave a new child reachable.
