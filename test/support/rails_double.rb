@@ -65,7 +65,7 @@ module RailsDouble
 
     def lease_connection = @leased
 
-    def with_connection = yield @leased
+    def with_connection = yield(@leased)
 
     def transaction(**opts, &blk)
       @transactions << opts
