@@ -20,7 +20,7 @@ Only `activesupport` is needed: the Rails packs are exercised against a real
 ## Code style
 
 - Ruby 3.2+, two-space indent, 120 columns, `bundle exec rubocop` clean.
-- **No runtime dependencies.** Ever. The gemspec must stay empty of them.
+- **One runtime dependency — `candor`, and no others.** It is itself dependency-free; do not add a second.
 - Inside `lib/briefly/rails*.rb` the framework is always `::Rails` — a bare `Rails` resolves to
   `Briefly::Rails`. A test enforces this.
 - Line coverage must stay at 100% (`COVERAGE=true bundle exec rake test`).
