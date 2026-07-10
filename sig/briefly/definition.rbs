@@ -6,9 +6,12 @@ module Briefly
     attr_reader body: Proc
     attr_reader raw_name: Symbol
 
+    # The `[file, line]` the compiled methods report; `Builder#namespace` overwrites it.
+    attr_accessor source_location: [ String, Integer ]
+
     @memoized: bool
 
-    def initialize: (Symbol canonical, Array[Symbol] aliases, Proc body) -> void
+    def initialize: (Symbol canonical, Array[Symbol] aliases, Proc body, [ String, Integer ] source_location) -> void
     def initialize_copy: (Definition other) -> void
     def memoize!: () -> void
     def memoized?: () -> bool

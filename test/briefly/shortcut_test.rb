@@ -129,12 +129,14 @@ class ShortcutTest < BrieflyTest
     assert_raises(ArgumentError) { facade.boom }
   end
 
-  # Compiled bodies live in a `__briefly_body_*` namespace; a shortcut there would overwrite one.
+  # Compiled bodies live in candor's `__candor_body_*` namespace; a shortcut there would overwrite one.
+  # Briefly refuses it in `validate_name!`, as the name is declared — candor's own refusal comes too late.
   def test_the_compiled_body_namespace_is_reserved
+    hijack = Candor.body_name(:foo)
     error = assert_raises(Briefly::ReservedNameError) do
       Briefly.define do
         shortcut(:foo) { :real }
-        shortcut(:__briefly_body_foo) { :hijacked }
+        shortcut(hijack) { :hijacked }
       end
     end
 

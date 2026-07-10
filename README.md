@@ -7,12 +7,16 @@
 [![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.2-CC342D.svg)](https://www.ruby-lang.org)
 [![Types: RBS](https://img.shields.io/badge/types-RBS-8A2BE2.svg)](https://github.com/svyatov/briefly/tree/main/sig)
 
-A terse, curated facade over your application's most reached-for objects — **dependency-free**,
-**thread-safe**, **reload-correct**, with a batteries-included Rails pack.
+A terse, curated facade over your application's most reached-for objects — **thread-safe**,
+**reload-correct**, with a batteries-included Rails pack.
 
 Every app grows an `App` module full of `def self.config = Rails.configuration`. `briefly` gives
 you that module without writing it, as **real methods** — no `method_missing`, so `respond_to?`,
-console tab-completion and test stubbing all just work.
+console tab-completion and test stubbing all just work. Each shortcut carries its body's `arity` and
+parameter kinds — keyword names are exact, positionals get generated ones — and its `source_location`
+is the block you declared, so jump-to-definition lands in your initializer rather than inside the gem.
+That fabrication is [candor](https://github.com/svyatov/candor), extracted from this gem and its only
+runtime dependency; candor itself has none.
 
 ```ruby
 # config/initializers/app.rb
@@ -34,8 +38,8 @@ App.local?                   # => true in development and test
 gem "briefly"
 ```
 
-Ruby >= 3.2. Rails is an **optional** dependency: the gem declares none, and `Briefly::Rails` is
-autoloaded only when you name it.
+Ruby >= 3.2. The one runtime dependency is `candor`. Rails is **optional**: the gem does not declare
+it, and `Briefly::Rails` is autoloaded only when you name it.
 
 ## Core concepts
 
@@ -126,15 +130,16 @@ constants (`Rails.logger`, `Sentry`) rather than bare shortcut names inside a ha
 > rescue_from(StandardError) { nil }
 >
 > App.host     # => nil. No exception, no log, no clue.
-> App.env(1)   # => nil. Wrong arity, silently accepted.
 > ```
 >
 > Three ways out, in order of preference: scope handlers to the shortcuts that can actually fail;
 > match the narrowest error class you mean; and if you do want a facade-wide handler, make it log
 > and `raise` — a bare `raise` inside a handler re-raises the original, backtrace intact.
 >
-> The one exception is memoized shortcuts. They compile to zero-argument methods, so `App.catalog(1)`
-> raises `ArgumentError` from the method itself, before any handler is consulted.
+> A bad *call* from outside the facade is not affected. Every shortcut carries its body's arity, so
+> `App.env(1)` raises `ArgumentError` at the call site, before any handler is consulted. One shortcut
+> body calling another with a bad argument list is a different matter: that raises *inside* the
+> calling body, where the calling shortcut's own handler sees it like any other error.
 
 > **⚠️ `{}` needs parentheses.** `rescue_from StandardError { ... }` binds the block to
 > `StandardError`, not to `rescue_from`, and raises `NoMethodError`. Use **either** form:

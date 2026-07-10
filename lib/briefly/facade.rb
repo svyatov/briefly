@@ -9,10 +9,6 @@ module Briefly
   # Memo store: reads are lock-free against a frozen snapshot hash; writes swap in a new frozen hash
   # under a reentrant +Monitor+, because a memoized body may call another memoized shortcut.
   class Facade
-    # Prefix of the private singleton methods holding compiled shortcut bodies. Shortcut names may
-    # not start with it, or one shortcut would silently overwrite another's body.
-    BODY_PREFIX = "__briefly_body_"
-
     def initialize
       @__defs = {}
       @__aliases = {}
@@ -98,26 +94,22 @@ module Briefly
       names.each { |name| singleton_class.send(:remove_method, name) }
     end
 
+    # Candor installs the body privately under its reserved prefix, reads that *compiled* method's
+    # `parameters` — never `defn.body.parameters`, which reports every positional as `:opt` and would
+    # silently destroy arity strictness — and compiles a dispatch of the same arity onto every name.
+    # Arity is enforced there, before `__call` and its rescue layer are entered.
+    #
+    # No `parameters:` override for a memoized shortcut: `compile!` has already refused any memoized body
+    # that takes an argument, so its compiled shape is empty and `App.catalog(1)` raises on its own.
+    #
+    # `source_location:` because `namespace` rewrites it: its body is a `proc { child }` literal in
+    # `builder.rb`, and the compiled method must point at the caller's block instead.
     def __define(defn)
-      sc = singleton_class
-      own = sc.private_instance_methods(false)
-      sc.send(:remove_method, defn.raw_name) if own.include?(defn.raw_name)
-      sc.define_method(defn.raw_name, &defn.body)
-      sc.send(:private, defn.raw_name)
-
-      canonical = defn.canonical
-      dispatch = if defn.memoized?
-                   # No parameters: `define_method` makes arity strict, so a memoized shortcut says
-                   # so with an ArgumentError instead of silently returning the cache.
-                   proc { __call(canonical) }
-                 else
-                   proc { |*args, **kwargs, &blk| __call(canonical, *args, **kwargs, &blk) }
-                 end
-
-      defn.names.each do |name|
-        sc.send(:remove_method, name) if @__public.include?(name)
-        sc.define_method(name, &dispatch)
-      end
+      Candor.define(singleton_class, defn.canonical,
+                    aliases: defn.aliases,
+                    via: :__call,
+                    source_location: defn.source_location,
+                    body: defn.body)
     end
 
     def __call(name, ...)

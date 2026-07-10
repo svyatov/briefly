@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "support/variadic_fixture"
 
 class RescueFromTest < BrieflyTest
   class NotStandard < Exception; end # rubocop:disable Lint/InheritException
@@ -299,5 +300,71 @@ class RescueFromTest < BrieflyTest
 
     assert blocked, "#add must hold @mutex while rebinding @entries"
     assert_equal 1, registry.wide.size
+  end
+
+  # A shortcut's public method carries the body's arity, so a bad call raises at the call site, before
+  # `__call` and its rescue layer are entered. The distinction a handler can now rely on is *where* the
+  # error came from: about the call, or from inside the body.
+
+  def test_a_wrong_arity_call_escapes_a_facade_wide_handler
+    facade = swallowing_facade(Briefly::Facade)
+
+    assert_raises(ArgumentError) { facade.env(1) }
+    assert_raises(ArgumentError) { facade.greet }
+  end
+
+  # Arity is strict at the call site, and a body *is* a call site. The callee raises inside the
+  # caller's `__call`, so the caller's handler sees it — the escape above is about the facade's
+  # boundary, not about `ArgumentError`.
+  def test_a_wrong_arity_call_between_shortcuts_is_seen_by_the_callers_handler
+    facade = Briefly.define do
+      shortcut(:callee) { |a| a }
+      shortcut(:caller_of) { callee(1, 2) }
+      rescue_from(StandardError) { :rescued }
+    end
+
+    assert_raises(ArgumentError) { facade.callee(1, 2) }
+    assert_equal :rescued, facade.caller_of
+  end
+
+  def test_a_missing_required_keyword_escapes_a_facade_wide_handler
+    facade = swallowing_facade(Briefly::Facade)
+
+    assert_raises(ArgumentError) { facade.fetch }
+  end
+
+  def test_an_unknown_keyword_escapes_a_facade_wide_handler
+    facade = swallowing_facade(Briefly::Facade)
+
+    assert_raises(ArgumentError) { facade.fetch(key: 1, nope: 2) }
+  end
+
+  def test_an_error_raised_inside_a_body_is_still_rescued
+    facade = swallowing_facade(Briefly::Facade)
+
+    assert_nil facade.host
+  end
+
+  # Without this, the three guards above pin nothing: they would pass against the variadic dispatch too
+  # if the handler simply never matched.
+  def test_the_variadic_fixture_swallows_the_bad_calls_so_the_guards_bite
+    facade = swallowing_facade(VariadicFacade)
+
+    assert_nil facade.env(1)
+    assert_nil facade.greet
+    assert_nil facade.fetch
+    assert_nil facade.fetch(key: 1, nope: 2)
+  end
+
+  private
+
+  def swallowing_facade(klass)
+    klass.new.configure do
+      shortcut(:env) { "prod" }
+      shortcut(:greet) { |name| name }
+      shortcut(:fetch) { |key:| key }
+      shortcut(:host) { raise "boom" }
+      rescue_from(StandardError) { nil }
+    end
   end
 end

@@ -63,6 +63,8 @@ module Briefly
       # Routes through `shortcut` for purge and validation, which drops the child this call just
       # resolved — so re-register both afterwards. An external `shortcut(name)` gets no such reprieve.
       shortcut(name) { child }
+      # The proc above is a literal in this file. Point the compiled method at the caller's block instead.
+      @defs[name].source_location = block.source_location
       @children[name] = child
       @pending[name] = pending
       name
@@ -78,7 +80,10 @@ module Briefly
     def shortcut(canonical, *aliases, &body)
       raise ArgumentError, "shortcut(#{canonical.inspect}) requires a block" unless body
 
-      defn = Definition.new(canonical, aliases, body)
+      # A `&:upcase`-style Proc carries no location of its own; fall back to this call site so the compiled
+      # method points at the user's declaration, never a fabricated file. `namespace` overwrites it anyway.
+      location = body.source_location || caller_locations(1, 1).first.then { |l| [l.path, l.lineno] }
+      defn = Definition.new(canonical, aliases, body, location)
       defn.names.each { |name| validate_name!(name) }
       purge(defn.names, except: canonical)
       @defs[canonical] = defn
@@ -141,9 +146,10 @@ module Briefly
     def validate_name!(name)
       raise ArgumentError, "shortcut names must be Symbols, got #{name.inspect}" unless name.is_a?(Symbol)
       raise ReservedNameError, "#{name} is reserved by Briefly::Facade" if Facade::RESERVED.include?(name)
-      return unless name.start_with?(Facade::BODY_PREFIX)
+      # Candor raises here too, but as an ArgumentError, and only once the pass is already committing.
+      return unless name.start_with?(Candor::BODY_PREFIX)
 
-      raise ReservedNameError, "#{name} is reserved: #{Facade::BODY_PREFIX}* names hold compiled shortcut bodies"
+      raise ReservedNameError, "#{name} is reserved: #{Candor::BODY_PREFIX}* names hold compiled shortcut bodies"
     end
 
     # Frees the incoming names from any definition that currently owns them, so a redeclaration

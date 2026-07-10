@@ -2,7 +2,7 @@
 
 source "https://rubygems.org"
 
-# Runtime dependencies are declared in the gemspec (there are none).
+# Runtime dependencies are declared in the gemspec.
 gemspec
 
 gem "irb", require: false # for bin/console (a bundled gem since Ruby 3.4)

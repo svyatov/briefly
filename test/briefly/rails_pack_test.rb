@@ -128,6 +128,15 @@ class RailsPackTest < BrieflyTest
   # Globbed so a pack file added later cannot slip past `bare_framework_refs`.
   def pack_sources = Dir[File.join(LIB, "briefly/rails.rb"), File.join(LIB, "briefly/rails/*.rb")].sort
 
+  # R9: jump-to-definition on a pack's shortcut lands in the pack, not in the initializer that used it.
+  def test_a_pack_shortcut_reports_the_packs_own_file
+    with_rails do |_rails, _controller, facade|
+      assert_equal "#{LIB}/briefly/rails.rb", facade.method(:env).source_location.first
+      assert_equal "#{LIB}/briefly/rails.rb", facade.method(:db).source_location.first
+      assert_equal "#{LIB}/briefly/rails/db.rb", facade.db.method(:query).source_location.first
+    end
+  end
+
   def with_rails(root: Dir.pwd, env: "test")
     RailsDouble.with(root: root, env: env) do |rails, controller|
       yield rails, controller, Briefly.define { use Briefly::Rails }

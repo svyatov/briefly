@@ -5,9 +5,6 @@ module Briefly
     # Names a shortcut may not take.
     RESERVED: Array[Symbol]
 
-    # Prefix of the private singleton methods holding compiled shortcut bodies.
-    BODY_PREFIX: String
-
     @__defs: Hash[Symbol, Definition]
     @__aliases: Hash[Symbol, Symbol]
     @__memos: Hash[Symbol, untyped]

@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
 
   spec.summary = "A terse, curated facade over your application's most reached-for objects."
   spec.description = "Declare one facade object per application area and reach your framework, config and " \
-                     "clients through short, real, introspectable methods. Zero runtime dependencies, " \
+                     "clients through short, real, introspectable methods. One runtime dependency (candor), " \
                      "correct under Puma and Rails code reloading, with a batteries-included Rails pack."
   spec.homepage = "https://github.com/svyatov/briefly"
   spec.license = "MIT"
@@ -20,6 +20,8 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
   spec.files = Dir["lib/**/*.rb"] + Dir["sig/**/*"] +
                %w[.yardopts CHANGELOG.md LICENSE.txt README.md briefly.gemspec]
+
+  spec.add_dependency "candor", "~> 0.2.0"
 
   spec.metadata["rubygems_mfa_required"] = "true"
   spec.metadata["documentation_uri"] = "https://rubydoc.info/gems/briefly"

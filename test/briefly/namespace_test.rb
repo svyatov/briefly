@@ -212,4 +212,53 @@ class NamespaceTest < BrieflyTest
 
     assert_equal :recovered, facade.db.query
   end
+
+  # `namespace` synthesizes `shortcut(name) { child }`, whose proc literal lives in `builder.rb`.
+  def test_a_namespace_reports_the_namespace_block_not_builder_rb
+    line = __LINE__ + 3
+    facade = Briefly.define do
+      shortcut(:root_level) { :root }
+      namespace(:db) do
+        shortcut(:query) { |sql| sql }
+      end
+    end
+
+    assert_equal [__FILE__, line], facade.method(:db).source_location
+  end
+
+  # Declared twice in one pass (a pack declares it, an app extends it), the child is reused but its
+  # `source_location` follows the last block — consistent with last-declaration-wins for a plain shortcut.
+  def test_a_namespace_declared_twice_reports_the_last_block
+    line = __LINE__ + 3
+    facade = Briefly.define do
+      namespace(:db) { shortcut(:first) { :a } }
+      namespace(:db) { shortcut(:second) { :b } }
+    end
+
+    assert_equal %i[first second], facade.db.shortcuts
+    assert_equal [__FILE__, line], facade.method(:db).source_location
+  end
+
+  def test_a_shortcut_inside_a_namespace_reports_its_own_block
+    line = __LINE__ + 3
+    facade = Briefly.define do
+      namespace(:db) do
+        shortcut(:query) { |sql| sql }
+      end
+    end
+
+    assert_equal [__FILE__, line], facade.db.method(:query).source_location
+  end
+
+  # R9, in miniature: the location is the pack's `install`, not the `Briefly.define` that used it.
+  def test_a_pack_installed_shortcut_reports_the_pack_not_the_call_site
+    install_line = __LINE__ + 2
+    pack = Class.new do
+      def self.install(builder) = builder.namespace(:cache) { shortcut(:hit) { :hit } }
+    end
+    facade = Briefly.define { use pack }
+
+    assert_equal [__FILE__, install_line], facade.method(:cache).source_location
+    assert_equal [__FILE__, install_line], facade.cache.method(:hit).source_location
+  end
 end

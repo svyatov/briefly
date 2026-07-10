@@ -7,8 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 briefly builds a terse facade over an application's most reached-for objects — `App.config`,
 `App.render`, `App.logger`. `Briefly.define { ... }` returns a `Facade` whose shortcuts are compiled
 onto its singleton class as **real methods**, so `respond_to?`, console tab-completion and test
-stubbing all work unaided. There is no `method_missing` anywhere, and the gem has **zero runtime
-dependencies**. Rails support lives in an optional, autoloaded pack.
+stubbing all work unaided. There is no `method_missing` anywhere. Method fabrication — the arity, the
+`parameters` and the `source_location` a shortcut reports — is [candor](https://github.com/svyatov/candor),
+this gem's one runtime dependency, which is itself dependency-free. Rails support lives in an optional,
+autoloaded pack.
 
 ## Common Commands
 
@@ -42,12 +44,19 @@ bundle exec rake release
 
 Four core files, each with one job:
 
-- `lib/briefly/definition.rb` — one shortcut declaration: canonical name, aliases, body, memoized flag
+- `lib/briefly/definition.rb` — one shortcut declaration: canonical name, aliases, body, source
+  location, memoized flag
 - `lib/briefly/builder.rb` — receives the DSL (`shortcut`, `memoize`, `rescue_from`, `use`,
   `namespace`), collects definitions, validates them in `compile!`
-- `lib/briefly/facade.rb` — compiles definitions onto its singleton class; owns the memo store, the
-  namespace children and error dispatch
+- `lib/briefly/facade.rb` — hands definitions to `Candor.define`; owns the memo store, the namespace
+  children and error dispatch
 - `lib/briefly/error_registry.rb` — `rescue_from` handlers, one instance per facade plus one global
+
+Every shortcut becomes a real method through `Candor.define(singleton_class, name, aliases:, via:
+:__call, parameters:, source_location:, body:)`. Candor installs the body privately under
+`Candor::BODY_PREFIX`, reads that compiled method's `parameters`, and compiles a same-arity dispatch
+onto every name; each call lands in `Facade#__call`, which is where memoization and `rescue_from` live.
+Nothing in this repo renders method source any more — see candor's own README and invariants.
 
 `lib/briefly/rails.rb` (autoloaded) is an umbrella over the packs nested in it — `Config`, `Env`,
 `View` — plus `lib/briefly/rails/db.rb` and `lib/briefly/rails/reload.rb`. A **pack** is any object
@@ -80,13 +89,35 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   body *reads* a rescue-backed shortcut pins the fallback. Documented in the README.
 - **`__handle` calls `Kernel.raise`, not bare `raise`.** A bare `raise` under an implicit receiver
   could dispatch into a shortcut named `raise`, recursing until `SystemStackError`.
-- **A facade-wide `rescue_from(StandardError)` also catches the user's own bugs.** An `ArgumentError`
-  from a wrong-arity call and a `NoMethodError` from a typo inside a body are indistinguishable, at
-  the point `__handle` runs, from the failure the handler was written for. Narrowing the `rescue` in
-  `__call` cannot separate them without backtrace inspection, so this is **documented, not fixed** —
-  see the README's `rescue_from` callout. Do not "solve" it by guessing at the error's origin.
-  Memoized shortcuts are the one exception: they compile to zero-argument methods, so an arity error
-  raises before `__call` is entered.
+- **Reflection parity is candor's, not ours.** Reading the *compiled* body's `parameters` rather than
+  the Proc's, rendering off a parameter's kind rather than its name, the unpassed-optional sentinel,
+  the collision-free prefix that keeps a keyword named `__u` or `binding` from capturing the generated
+  source, and dropping unpassed optionals by branching rather than accumulating — all of it lives in
+  `candor`, is pinned by candor's tests, and must be changed there. Do not reintroduce any of it here.
+- **`Candor.define` is passed `body:` and three keywords that each earn their place.** `via: :__call` routes
+  every shortcut through the memo and rescue layer. `source_location:` because `namespace` rewrites it —
+  its body is a `proc { child }` literal in `builder.rb`, and the compiled method must point at the
+  caller's block. `aliases:` so every name shares one dispatch and one canonical name. There is
+  deliberately **no** `parameters: []` for a memoized shortcut: `compile!` already refuses a memoized
+  body that takes an argument, so the override is unreachable, and a mutation deleting it fails no test.
+- **`Facade` gains no private instance method for compilation.** `Facade::RESERVED` is built from
+  `private_instance_methods(false)`, so one more private helper takes one more name out of the shortcut
+  namespace. `__define` delegates rather than compiles for exactly this reason. Pinned by
+  `test_the_facade_gained_no_private_helper`, which asserts the list is what it was before candor.
+- **A shortcut name may not start with `Candor::BODY_PREFIX`, and `Builder` says so in `validate_name!`, as each name is declared.**
+  Candor refuses the name too, but as an `ArgumentError` and only once `__commit` is already installing —
+  too late for the tree-wide atomicity `configure` promises.
+- **A facade-wide `rescue_from(StandardError)` also catches the user's own bugs.** A `NoMethodError`
+  from a typo inside a body is indistinguishable, at the point `__handle` runs, from the failure the
+  handler was written for. Narrowing the `rescue` in `__call` cannot separate them without backtrace
+  inspection, so this is **documented, not fixed** — see the README's `rescue_from` callout. Do not
+  "solve" it by guessing at the error's origin. A bad *call from outside the facade* is a different
+  matter and is fixed: every shortcut compiles to a method carrying its body's arity, so a wrong-arity
+  call, a missing required keyword and an unknown keyword all raise before that shortcut's `__call` is
+  entered, and its handlers never observe them. This does not extend to one body calling another: the
+  callee raises at a call site lexically inside the caller's body, hence inside the *caller's* `__call`
+  rescue, so the caller's handler swallows it. Pinned by
+  `test_a_wrong_arity_call_between_shortcuts_is_seen_by_the_callers_handler`.
 - **`__call` looks the definition up outside its own `rescue`.** An internal `KeyError` must never be
   laundered into a user's fallback.
 - **`ErrorRegistry#add` rebinds `@entries` under the mutex.** `[*@entries, entry]` is a read, a build

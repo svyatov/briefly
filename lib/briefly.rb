@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "candor"
+
 require "briefly/version"
 require "briefly/errors"
 require "briefly/definition"
