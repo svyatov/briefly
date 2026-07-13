@@ -5,6 +5,7 @@ require "briefly/rails/config"
 require "briefly/rails/env"
 require "briefly/rails/view"
 require "briefly/rails/db"
+require "briefly/rails/instrument"
 require "briefly/rails/reload"
 
 module Briefly
@@ -15,8 +16,8 @@ module Briefly
   #   App.render(...)  # => ApplicationController.renderer.render(...)
   #   App.db.txn { }   # => ApplicationRecord.transaction { }
   #
-  # An umbrella over {Config}, {Env}, {View} and {Reload}, plus {DB} under the +db+ namespace. Each is
-  # a pack in its own right, so a facade can take only the parts it wants:
+  # An umbrella over {Config}, {Env}, {View}, {Instrument} and {Reload}, plus {DB} under the +db+
+  # namespace. Each is a pack in its own right, so a facade can take only the parts it wants:
   #
   #   Admin = Briefly.define do
   #     use "rails/env"
@@ -39,6 +40,7 @@ module Briefly
       builder.use(Config)
       builder.use(Env)
       builder.use(View)
+      builder.use(Instrument)
       builder.namespace(:db) { use DB }
       builder
     end

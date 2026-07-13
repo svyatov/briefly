@@ -19,6 +19,13 @@ module Briefly
     # Nothing here memoizes: a connection is leased from the pool, and +query+ takes arguments. So the
     # pack does not wire {Reload}, and works without a booted application.
     #
+    # +connected_to+ forwards every argument to +base.connected_to+ — +role:+, +shard:+, +prevent_writes:+,
+    # and any custom role — so the full Rails multi-database surface is reachable. +reading+ and +writing+
+    # are sugar for the two common roles; they forward the rest (+shard:+, +prevent_writes:+) but pin the
+    # role, so +reading(role: :writing)+ still reads. Rails only allows +connected_to+ on +ActiveRecord::Base+
+    # or an abstract class — the one that declared +connects_to+ — so +base+ must be such a class; on a
+    # concrete model it raises +NotImplementedError+.
+    #
     # Inside this file the framework is always +::Rails+ — bare +Rails+ would resolve to the parent module.
     module DB
       module_function
@@ -31,6 +38,15 @@ module Briefly
 
         builder.shortcut(:connection, :conn) { model.call.lease_connection }
         builder.shortcut(:transaction, :txn) { |**opts, &blk| model.call.transaction(**opts, &blk) }
+        builder.shortcut(:connected_to) { |**opts, &blk| model.call.connected_to(**opts, &blk) }
+        # `**opts` first, `role:` last: the pinned role wins over any `role:` in `opts`, so `reading`
+        # always reads, while `shard:` and `prevent_writes:` still forward.
+        builder.shortcut(:reading) { |**opts, &blk| connected_to(**opts, role: :reading, &blk) }
+        builder.shortcut(:writing) { |**opts, &blk| connected_to(**opts, role: :writing, &blk) }
+        # `select_all`, the read-optimized path for a raw SELECT: it returns an `ActiveRecord::Result`
+        # without clearing the query cache, where `exec_query` is the general read/write form. `query`
+        # is a read helper by contract; a write still runs, but out of scope.
+        #
         # `with_connection`, not `connection`: the latter is soft-deprecated, and raises outright under
         # `ActiveRecord.permanent_connection_checkout = :disallowed`.
         #
@@ -43,7 +59,7 @@ module Briefly
         builder.shortcut(:query) do |sql, *binds|
           record = model.call
           statement = binds.empty? ? sql : record.sanitize_sql_array([sql, *binds])
-          record.with_connection { |connection| connection.exec_query(statement) }
+          record.with_connection { |connection| connection.select_all(statement) }
         end
         builder
       end

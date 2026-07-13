@@ -16,8 +16,8 @@ module Briefly
       # @return [Briefly::Builder]
       def install(builder)
         builder.shortcut(:env) { ::Rails.env }
-        builder.shortcut(:production?) { ::Rails.env.production? }
-        builder.shortcut(:development?) { ::Rails.env.development? }
+        builder.shortcut(:production?, :prod?) { ::Rails.env.production? }
+        builder.shortcut(:development?, :dev?) { ::Rails.env.development? }
         builder.shortcut(:test?) { ::Rails.env.test? }
         builder.shortcut(:local?) { ::Rails.env.local? }
         builder

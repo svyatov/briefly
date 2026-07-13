@@ -153,13 +153,28 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
 - **`clear_memos!` cascades into namespace children.** One `Reload` on the root clears the whole tree,
   including a namespace holding no Rails pack. Without this, memoizing inside a namespace pins a value
   across reloads, and no test but `test_clear_memos_cascades_into_namespaces` notices.
+- **`Briefly::Rails::DB#query` reads through `select_all`, not `exec_query`.** `select_all` is the
+  read-optimized path Rails recommends for a raw SELECT, returning an `ActiveRecord::Result` without
+  clearing the query cache. `query` is a read helper by contract; the bindless-skip and no-keyword
+  invariants below are unchanged by the switch — the only edit to the body was the connection method.
+  Pinned by `test_query_reads_through_select_all_not_exec_query`, which spies the leased connection so
+  a revert to `exec_query` fails rather than staying green (row/shape assertions pass under either).
 - **`Briefly::Rails::DB#query` must not sanitize a bindless statement.** `sanitize_sql_array` falls
   through to a `statement % values` branch that raises on any literal `%` — `... like '%ada%'`.
 - **`Briefly::Rails::DB#query`'s body takes no keyword parameter.** Accepting none is what makes Ruby
   pack `query(sql, id: 1)` into `binds` as a trailing Hash, which is how named binds reach
   `sanitize_sql_array`. A `**opts` would swallow them and send the statement to the database unbound.
+- **`Briefly::Rails::DB#connected_to` forwards `**opts` to the resolved base; `#reading` / `#writing`
+  pin the role after the splat.** `connected_to` is a faithful passthrough — role, shard, prevent_writes,
+  custom roles — so the whole Rails multi-database surface is reachable. `reading`/`writing` are sugar:
+  `connected_to(**opts, role: :reading, &blk)` puts the pinned role *after* `**opts` so a `role:` passed
+  through can't win, while `shard:`/`prevent_writes:` still forward. Rails allows `connected_to` only on
+  `ActiveRecord::Base` or an abstract class — the one that declared `connects_to` — so `base` must be
+  such a class; on a concrete model it raises `NotImplementedError`. Pinned by
+  `test_reading_and_writing_pin_their_role` and `test_connected_to_forwards_arbitrary_roles`.
 - **`Briefly::Rails::DB` uses `lease_connection` / `with_connection`, never `connection`.** The latter
-  is soft-deprecated and raises under `ActiveRecord.permanent_connection_checkout = :disallowed`.
+  is soft-deprecated and raises under `ActiveRecord.permanent_connection_checkout = :disallowed` — set
+  in the real-AR test harness, so the pack's `.connection`-avoidance is pinned rather than assumed.
 - **Inside `lib/briefly/rails*.rb` the framework is always `::Rails`.** Bare `Rails` resolves to
   `Briefly::Rails`. `test/briefly/rails_pack_test.rb` lexes the source to enforce this, and has
   fixture tests proving the check bites. It globs the pack files rather than listing them, so a new
@@ -169,9 +184,14 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
 
 ## Testing
 
-minitest, no RSpec. No dummy Rails app: the pack tests run against a hand-rolled `::Rails` double,
-and the reload test against a real `Class.new(ActiveSupport::Reloader)`, so `to_prepare`/`prepare!`
-semantics are genuinely exercised. `activesupport` is the only Rails-side dev dependency.
+minitest, no RSpec. No dummy Rails app. The forwarding packs (config, env, view, error, instrument)
+run against a hand-rolled `::Rails` double, and the reload test against a real
+`Class.new(ActiveSupport::Reloader)`, so `to_prepare`/`prepare!` semantics are genuinely exercised.
+The DB pack is the exception: it runs against real Active Record on in-memory SQLite
+(`test/support/active_record.rb`), so `lease_connection`, `with_connection`, `select_all`,
+`sanitize_sql_array` and `connected_to` are exercised as the framework really behaves, not as a double
+would echo them. `activesupport`, `activerecord` and `sqlite3` are the Rails-side dev dependencies; the
+gem still declares no Rails runtime dependency.
 
 Coverage must stay at 100% (`COVERAGE=true bundle exec rake`).
 
