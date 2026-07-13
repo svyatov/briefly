@@ -29,7 +29,7 @@ class RailsReloadTest < BrieflyTest
     RailsDouble.with(root: Dir.pwd) do
       facade = Briefly.define { use Briefly::Rails::Reload }
 
-      assert_empty facade.shortcuts
+      assert_empty facade.briefly.shortcuts
     end
   end
 
@@ -61,8 +61,8 @@ class RailsReloadTest < BrieflyTest
     RailsDouble.with(root: Dir.pwd) do |rails, _controller|
       cleared = 0
       facade = Briefly.define { use Briefly::Rails::Reload }
-      facade.configure { use Briefly::Rails::Reload }
-      facade.define_singleton_method(:clear_memos!) { cleared += 1 }
+      facade.briefly.configure { use Briefly::Rails::Reload }
+      facade.define_singleton_method(:__clear_memos!) { cleared += 1 }
 
       rails.application.reloader.prepare!
 

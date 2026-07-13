@@ -22,10 +22,10 @@ class NamespaceTest < BrieflyTest
   def test_the_namespace_is_a_shortcut_like_any_other
     facade = Briefly.define { namespace(:db) { shortcut(:query) { :queried } } }
 
-    assert facade.shortcut?(:db)
-    assert_equal [:db], facade.shortcuts
-    assert_equal [:query], facade.db.shortcuts
-    refute facade.shortcut?(:query)
+    assert facade.briefly.shortcut?(:db)
+    assert_equal [:db], facade.briefly.shortcuts
+    assert_equal [:query], facade.db.briefly.shortcuts
+    refute facade.briefly.shortcut?(:query)
   end
 
   def test_the_same_child_comes_back_on_every_call
@@ -78,7 +78,7 @@ class NamespaceTest < BrieflyTest
 
     assert_equal 1, calls
 
-    facade.clear_memos!
+    facade.briefly.clear_memos!
     facade.db.pool
 
     assert_equal 2, calls
@@ -95,7 +95,7 @@ class NamespaceTest < BrieflyTest
     child = facade.db
     facade.db.pool
 
-    facade.configure { namespace(:db) { shortcut(:extra) { :extra } } }
+    facade.briefly.configure { namespace(:db) { shortcut(:extra) { :extra } } }
 
     assert_same child, facade.db
     assert_equal :extra, facade.db.extra
@@ -112,7 +112,7 @@ class NamespaceTest < BrieflyTest
       namespace(:db) { shortcut(:health) { :ok } }
     end
 
-    assert_equal %i[health query], facade.db.shortcuts
+    assert_equal %i[health query], facade.db.briefly.shortcuts
     assert_equal "ran select 1", facade.db.query("select 1")
     assert_equal :ok, facade.db.health
   end
@@ -150,11 +150,11 @@ class NamespaceTest < BrieflyTest
     facade = Briefly.define { shortcut(:kept) { :kept } }
 
     assert_raises(Briefly::ReservedNameError) do
-      facade.configure { namespace(:db) { shortcut(:inspect) { nil } } }
+      facade.briefly.configure { namespace(:db) { shortcut(:inspect) { nil } } }
     end
 
-    assert_equal [:kept], facade.shortcuts
-    refute facade.shortcut?(:db)
+    assert_equal [:kept], facade.briefly.shortcuts
+    refute facade.briefly.shortcut?(:db)
   end
 
   # The child is created in a copy of `@__children`; only a pass that reaches the end commits it.
@@ -162,13 +162,13 @@ class NamespaceTest < BrieflyTest
     facade = Briefly.define { shortcut(:kept) { :kept } }
 
     assert_raises(Briefly::ReservedNameError) do
-      facade.configure do
+      facade.briefly.configure do
         namespace(:db) { shortcut(:query) { :queried } }
         shortcut(:inspect) { nil }
       end
     end
 
-    refute facade.shortcut?(:db)
+    refute facade.briefly.shortcut?(:db)
     refute_respond_to facade, :db
   end
 
@@ -178,13 +178,13 @@ class NamespaceTest < BrieflyTest
     facade = Briefly.define { namespace(:db) { shortcut(:query) { :queried } } }
 
     assert_raises(Briefly::ReservedNameError) do
-      facade.configure do
+      facade.briefly.configure do
         namespace(:db) { shortcut(:added) { :added } }
         shortcut(:inspect) { nil }
       end
     end
 
-    assert_equal [:query], facade.db.shortcuts
+    assert_equal [:query], facade.db.briefly.shortcuts
   end
 
   # Sibling namespaces commit together: a later one's failure cannot leave an earlier one mutated.
@@ -195,14 +195,14 @@ class NamespaceTest < BrieflyTest
     end
 
     assert_raises(Briefly::ReservedNameError) do
-      facade.configure do
+      facade.briefly.configure do
         namespace(:a) { shortcut(:added) { :added } }
         namespace(:b) { shortcut(:inspect) { nil } }
       end
     end
 
-    assert_equal [:kept], facade.a.shortcuts
-    assert_equal [:kept], facade.b.shortcuts
+    assert_equal [:kept], facade.a.briefly.shortcuts
+    assert_equal [:kept], facade.b.briefly.shortcuts
   end
 
   # A namespace owns its error registry. The global one is still consulted, via the child's own handler.
@@ -235,7 +235,7 @@ class NamespaceTest < BrieflyTest
       namespace(:db) { shortcut(:second) { :b } }
     end
 
-    assert_equal %i[first second], facade.db.shortcuts
+    assert_equal %i[first second], facade.db.briefly.shortcuts
     assert_equal [__FILE__, line], facade.method(:db).source_location
   end
 

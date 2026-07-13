@@ -105,7 +105,7 @@ class MemoizeTest < BrieflyTest
 
     facade.value
 
-    assert_same facade, facade.clear_memos!
+    assert_same facade, facade.briefly.clear_memos!
 
     facade.value
 
@@ -120,7 +120,7 @@ class MemoizeTest < BrieflyTest
     end
 
     facade.value
-    facade.reset!
+    facade.briefly.clear_memos!
     facade.value
 
     assert_equal 2, calls

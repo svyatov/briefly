@@ -19,24 +19,69 @@ module Briefly
       @__children = {}
     end
 
+    # The single public door to a facade's management operations, so those five names stay free for
+    # shortcuts. A fresh {Control} each call is stateless and thread-safe — nothing to race on — and an
+    # allocation is trivial next to how rarely management runs; identity across calls is not guaranteed.
+    #
+    # @return [Control]
+    def briefly = Control.new(self)
+
+    # @return [String] a summary listing shortcut names; never dumps memo internals
+    def inspect = "#<#{self.class.name} shortcuts=#{__shortcuts.inspect}>"
+    alias to_s inspect
+
+    # The management surface, forwarded to the facade's private +__+-prefixed methods. Mutators return
+    # the facade so +Briefly.define+-style chaining and the return-self contract hold; readers return
+    # their values. It forwards via +send+, the same seam +Builder+ uses to reach +__commit+.
+    class Control
+      # @param facade [Facade]
+      def initialize(facade) = @facade = facade
+
+      # @return [Array<Symbol>] canonical shortcut names, sorted; aliases excluded
+      def shortcuts = @facade.send(:__shortcuts)
+
+      # @param name [Symbol] a canonical name or an alias
+      # @return [Boolean]
+      def shortcut?(name) = @facade.send(:__shortcut?, name)
+
+      # Drops every memoized value, here and in every namespace. Thread-safe.
+      #
+      # @return [Facade] the facade
+      def clear_memos! = @facade.send(:__clear_memos!)
+
+      # Reopens the facade for another builder pass and recompiles.
+      #
+      # @yield [] evaluated against a {Briefly::Builder}
+      # @return [Facade] the facade
+      def configure(&) = @facade.send(:__configure, &)
+
+      # Names the management operations, so typing `App.briefly` at a console self-describes what the
+      # door offers instead of echoing the facade's shortcut list. Keep in sync with the methods above.
+      #
+      # @return [String]
+      def inspect = "#<#{self.class.name} shortcuts shortcut? clear_memos! configure>"
+      alias to_s inspect
+    end
+
+    private
+
     # @return [Array<Symbol>] canonical shortcut names, sorted; aliases excluded
-    def shortcuts = @__defs.keys.sort
+    def __shortcuts = @__defs.keys.sort
 
     # @param name [Symbol] a canonical name or an alias
     # @return [Boolean]
-    def shortcut?(name) = @__defs.key?(name) || @__aliases.key?(name)
+    def __shortcut?(name) = @__defs.key?(name) || @__aliases.key?(name)
 
     # Drops every memoized value, here and in every namespace. Thread-safe.
     #
     # @return [self]
-    def clear_memos!
+    def __clear_memos!
       @__monitor.synchronize { @__memos = {}.freeze }
       # Each namespace owns its memo store and its own lock, so a child clears outside our monitor.
       # One `Reload` on the root therefore clears the whole tree, including namespaces holding no pack.
-      @__children.each_value(&:clear_memos!)
+      @__children.each_value { |child| child.send(:__clear_memos!) }
       self
     end
-    alias reset! clear_memos!
 
     # Reopens the facade for another builder pass and recompiles. The builder starts from copies of the
     # current definitions, so a pass that raises leaves the live facade — and every namespace under it
@@ -44,7 +89,7 @@ module Briefly
     #
     # @yield [] evaluated against a {Briefly::Builder}
     # @return [self]
-    def configure(&block)
+    def __configure(&block)
       builder = __prepare
       builder.instance_eval(&block) if block
       # `compile!` validates the whole tree before `__commit` installs any of it. Splitting the two is
@@ -53,12 +98,6 @@ module Briefly
       __commit(builder.compile!)
       self
     end
-
-    # @return [String] a summary listing shortcut names; never dumps memo internals
-    def inspect = "#<#{self.class.name} shortcuts=#{shortcuts.inspect}>"
-    alias to_s inspect
-
-    private
 
     # A builder seeded with copies of everything a pass may mutate. {Briefly::Builder#namespace} calls
     # this on the child it collects.

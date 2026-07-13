@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 module Briefly
-  # Receives the DSL. {Briefly.define}'s block and {Briefly::Facade#configure}'s block are
+  # Receives the DSL. {Briefly.define}'s block and {Briefly::Facade::Control#configure}'s block are
   # +instance_eval+'d here, never on the facade, so DSL verbs can never collide with shortcut names.
   #
-  # The block only collects; {#compile!} then validates, and {Briefly::Facade#configure} installs.
+  # The block only collects; {#compile!} then validates, and {Briefly::Facade::Control#configure} installs.
   class Builder
     # @return [Briefly::Facade] the facade under construction, for packs that need lifecycle hooks
     attr_reader :facade
@@ -41,7 +41,7 @@ module Briefly
     # the child's own DSL — +shortcut+, +memoize+, +use+, +rescue_from+, and further namespaces.
     #
     # The child is created once and reused by later passes, so its memos survive +configure+.
-    # {Briefly::Facade#clear_memos!} cascades into it. Two limits, both deliberate: a child body cannot
+    # {Briefly::Facade::Control#clear_memos!} cascades into it. Two limits, both deliberate: a child body cannot
     # reach a root shortcut by bare name, and a root +rescue_from+ does not scope into the child.
     #
     # The child's pass is *collected*, not run: its builder is held until {#compile!} has validated the
@@ -125,7 +125,7 @@ module Briefly
     end
 
     # Validates everything collected in this pass, and recursively every namespace pass it collected.
-    # {Briefly::Facade#configure} installs the result. Validation of the whole tree finishes before any
+    # {Briefly::Facade::Control#configure} installs the result. Validation of the whole tree finishes before any
     # of it is installed.
     #
     # @api private

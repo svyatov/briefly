@@ -70,9 +70,9 @@ class ShortcutTest < BrieflyTest
 
   def test_redefinition_drops_stale_aliases
     facade = Briefly.define { shortcut(:config, :c) { :first } }
-    facade.configure { shortcut(:config) { :second } }
+    facade.briefly.configure { shortcut(:config) { :second } }
 
-    refute facade.shortcut?(:c)
+    refute facade.briefly.shortcut?(:c)
     refute_respond_to facade, :c
     assert_equal :second, facade.config
   end
@@ -83,7 +83,7 @@ class ShortcutTest < BrieflyTest
       shortcut(:b) { :from_b }
     end
 
-    assert_equal %i[a b], facade.shortcuts
+    assert_equal %i[a b], facade.briefly.shortcuts
     assert_equal :from_a, facade.a
     assert_equal :from_b, facade.b
   end
@@ -94,7 +94,7 @@ class ShortcutTest < BrieflyTest
       shortcut(:b, :a) { :from_b }
     end
 
-    assert_equal %i[b], facade.shortcuts
+    assert_equal %i[b], facade.briefly.shortcuts
     assert_equal :from_b, facade.a
   end
 
@@ -108,8 +108,11 @@ class ShortcutTest < BrieflyTest
     assert_raises(Briefly::ReservedNameError) { Briefly.define { shortcut(:fine, :send) { 1 } } }
   end
 
-  def test_reserved_lifecycle_names_raise
-    %i[shortcuts shortcut? clear_memos! reset! configure inspect to_s].each do |name|
+  # The facade's public surface is now `inspect`, `to_s`, and the `briefly` accessor — those three stay
+  # reserved. The five former lifecycle names moved behind `briefly` and are free again (see
+  # `briefly_accessor_test.rb`).
+  def test_reserved_public_surface_names_raise
+    %i[inspect to_s briefly].each do |name|
       assert_raises(Briefly::ReservedNameError) { Briefly.define { shortcut(name) { 1 } } }
     end
   end

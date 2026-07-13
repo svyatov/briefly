@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Changed
+- **BREAKING:** Facade management moved behind a single `App.briefly` accessor —
+  `App.briefly.configure`, `App.briefly.shortcuts`, `App.briefly.shortcut?` and
+  `App.briefly.clear_memos!`. This frees `configure`, `shortcuts`, `shortcut?` and `clear_memos!` for
+  use as your own shortcut names; only `briefly`, `inspect` and `to_s` stay reserved on the facade's
+  public surface.
+
+### Removed
+- **BREAKING:** `App.reset!` — use `App.briefly.clear_memos!`. It was a pure alias for `clear_memos!`
+  with no internal callers.
+
 ## v0.1.0 (2026-07-10)
 
 ### Added

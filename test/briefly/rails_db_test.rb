@@ -101,7 +101,7 @@ class RailsDbTest < BrieflyTest
 
     facade = Briefly.define { use Briefly::Rails::DB }
 
-    assert_equal %i[connection query transaction], facade.shortcuts
+    assert_equal %i[connection query transaction], facade.briefly.shortcuts
   end
 
   def test_the_pack_memoizes_nothing
@@ -122,7 +122,7 @@ class RailsDbTest < BrieflyTest
 
       assert_equal :from_block, result
       assert_equal [{}], model.transactions
-      refute facade.shortcut?(:txn), "the umbrella must add no root-level DB names"
+      refute facade.briefly.shortcut?(:txn), "the umbrella must add no root-level DB names"
     end
   end
 

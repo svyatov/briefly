@@ -31,7 +31,7 @@ module Briefly
         end
 
         facade.instance_variable_set(INSTALLED, true)
-        app.reloader.to_prepare { facade.clear_memos! }
+        app.reloader.to_prepare { facade.briefly.clear_memos! }
         builder
       end
     end

@@ -83,7 +83,7 @@ class ConcurrencyTest < BrieflyTest
     facade.value
 
     assert_predicate memos(facade), :frozen?
-    facade.clear_memos!
+    facade.briefly.clear_memos!
 
     assert_predicate memos(facade), :frozen?
   end
@@ -97,7 +97,7 @@ class ConcurrencyTest < BrieflyTest
     stop = false
     seen = Thread::Queue.new
     readers = Array.new(4) { Thread.new { seen << facade.value until stop } }
-    Thread.new { 500.times { facade.clear_memos! } }.join
+    Thread.new { 500.times { facade.briefly.clear_memos! } }.join
     stop = true
     readers.each(&:join)
 

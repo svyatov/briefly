@@ -359,7 +359,7 @@ class RescueFromTest < BrieflyTest
   private
 
   def swallowing_facade(klass)
-    klass.new.configure do
+    klass.new.briefly.configure do
       shortcut(:env) { "prod" }
       shortcut(:greet) { |name| name }
       shortcut(:fetch) { |key:| key }
