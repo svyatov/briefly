@@ -14,16 +14,30 @@ module Briefly
     @__children: Hash[Symbol, Facade]
 
     def initialize: () -> void
-    def shortcuts: () -> Array[Symbol]
-    def shortcut?: (Symbol name) -> bool
-    def clear_memos!: () -> self
-    def reset!: () -> self
-    def configure: () ?{ (?) [self: Builder] -> void } -> self
+    def briefly: () -> Control
     def inspect: () -> String
     def to_s: () -> String
 
+    # The management surface, forwarded to the facade's private `__`-prefixed methods. Mutators return
+    # the facade; readers return their values.
+    class Control
+      @facade: Facade
+
+      def initialize: (Facade facade) -> void
+      def shortcuts: () -> Array[Symbol]
+      def shortcut?: (Symbol name) -> bool
+      def clear_memos!: () -> Facade
+      def configure: () ?{ (?) [self: Builder] -> void } -> Facade
+      def inspect: () -> String
+      def to_s: () -> String
+    end
+
     private
 
+    def __shortcuts: () -> Array[Symbol]
+    def __shortcut?: (Symbol name) -> bool
+    def __clear_memos!: () -> self
+    def __configure: () ?{ (?) [self: Builder] -> void } -> self
     def __prepare: () -> Builder
     def __commit: (Briefly::plan plan) -> self
     def __install: (Hash[Symbol, Definition] defs, Array[Briefly::error_entry] error_entries) -> self

@@ -100,10 +100,16 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   caller's block. `aliases:` so every name shares one dispatch and one canonical name. There is
   deliberately **no** `parameters: []` for a memoized shortcut: `compile!` already refuses a memoized
   body that takes an argument, so the override is unreachable, and a mutation deleting it fails no test.
-- **`Facade` gains no private instance method for compilation.** `Facade::RESERVED` is built from
-  `private_instance_methods(false)`, so one more private helper takes one more name out of the shortcut
-  namespace. `__define` delegates rather than compiles for exactly this reason. Pinned by
-  `test_the_facade_gained_no_private_helper`, which asserts the list is what it was before candor.
+- **`Facade` gains no private helper *for compilation*.** `Facade::RESERVED` is built from
+  `private_instance_methods(false)`, so every private method takes one name out of the shortcut
+  namespace. Two kinds of private method are not the same: an *accidental compilation helper* is still
+  forbidden — `__define` delegates to candor rather than compiling for exactly this reason — but the
+  four `__`-prefixed *management* methods (`__shortcuts`, `__shortcut?`, `__clear_memos!`, `__configure`)
+  are deliberate. They are the surface behind the single public `briefly` accessor, reached by
+  `Control` via `send`, and hiding all four behind one door is why only `briefly` — not five names —
+  leaves the shortcut namespace. Every private name being `__`-prefixed is what keeps it unreachable as
+  a shortcut. Pinned by `test_the_facade_gained_no_private_helper` (the exact list) and its sibling
+  `test_every_reserved_private_name_is_prefixed_and_so_unreachable_as_a_shortcut`.
 - **A shortcut name may not start with `Candor::BODY_PREFIX`, and `Builder` says so in `validate_name!`, as each name is declared.**
   Candor refuses the name too, but as an `ArgumentError` and only once `__commit` is already installing —
   too late for the tree-wide atomicity `configure` promises.

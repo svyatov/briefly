@@ -45,8 +45,8 @@ class RailsPackTest < BrieflyTest
 
   def test_secrets_is_absent_and_credentials_replaces_it
     with_rails do |_rails, _controller, facade|
-      refute facade.shortcut?(:secrets)
-      assert facade.shortcut?(:credentials)
+      refute facade.briefly.shortcut?(:secrets)
+      assert facade.briefly.shortcut?(:credentials)
     end
   end
 
@@ -104,14 +104,14 @@ class RailsPackTest < BrieflyTest
 
   def test_the_mini_packs_install_independently
     with_rails do |rails, _controller, _facade|
-      assert_equal [:env], Briefly.define { use "rails/env" }.shortcuts.grep(:env)
+      assert_equal [:env], Briefly.define { use "rails/env" }.briefly.shortcuts.grep(:env)
       assert_same rails.configuration, Briefly.define { use Briefly::Rails::Config }.config
     end
   end
 
   def test_an_app_can_override_a_pack_shortcut
     with_rails do |_rails, _controller, facade|
-      facade.configure { shortcut(:config) { "custom" } }
+      facade.briefly.configure { shortcut(:config) { "custom" } }
 
       assert_equal "custom", facade.config
     end

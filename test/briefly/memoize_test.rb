@@ -105,22 +105,8 @@ class MemoizeTest < BrieflyTest
 
     facade.value
 
-    assert_same facade, facade.clear_memos!
+    assert_same facade, facade.briefly.clear_memos!
 
-    facade.value
-
-    assert_equal 2, calls
-  end
-
-  def test_reset_bang_is_an_alias_of_clear_memos
-    calls = 0
-    facade = Briefly.define do
-      shortcut(:value) { calls += 1 }
-      memoize :value
-    end
-
-    facade.value
-    facade.reset!
     facade.value
 
     assert_equal 2, calls

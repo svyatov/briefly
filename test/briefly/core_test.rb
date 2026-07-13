@@ -16,15 +16,15 @@ class CoreTest < BrieflyTest
     b = Briefly.define { shortcut(:only_b) { 2 } }
 
     refute_same a, b
-    refute a.shortcut?(:only_b)
-    refute b.shortcut?(:only_a)
+    refute a.briefly.shortcut?(:only_b)
+    refute b.briefly.shortcut?(:only_a)
   end
 
   def test_empty_facade_is_valid
     facade = Briefly.define
 
-    assert_empty facade.shortcuts
-    refute facade.shortcut?(:anything)
+    assert_empty facade.briefly.shortcuts
+    refute facade.briefly.shortcut?(:anything)
   end
 
   def test_shortcuts_are_sorted_canonical_names_only
@@ -33,20 +33,20 @@ class CoreTest < BrieflyTest
       shortcut(:alpha, :a) { 2 }
     end
 
-    assert_equal %i[alpha zeta], facade.shortcuts
+    assert_equal %i[alpha zeta], facade.briefly.shortcuts
   end
 
   def test_shortcut_predicate_accepts_canonical_and_alias
     facade = Briefly.define { shortcut(:config, :c) { 1 } }
 
-    assert facade.shortcut?(:config)
-    assert facade.shortcut?(:c)
-    refute facade.shortcut?(:nope)
+    assert facade.briefly.shortcut?(:config)
+    assert facade.briefly.shortcut?(:c)
+    refute facade.briefly.shortcut?(:nope)
   end
 
   def test_configure_adds_shortcuts_to_an_existing_facade
     facade = Briefly.define
-    facade.configure { shortcut(:late) { :added } }
+    facade.briefly.configure { shortcut(:late) { :added } }
 
     assert_equal :added, facade.late
   end
@@ -54,7 +54,7 @@ class CoreTest < BrieflyTest
   def test_configure_returns_the_facade
     facade = Briefly.define
 
-    result = facade.configure { shortcut(:x) { 1 } }
+    result = facade.briefly.configure { shortcut(:x) { 1 } }
 
     assert_same facade, result
   end
@@ -65,19 +65,19 @@ class CoreTest < BrieflyTest
       shortcut(:cached) { calls += 1 }
       memoize :cached
     end
-    facade.configure { shortcut(:other) { :other } }
+    facade.briefly.configure { shortcut(:other) { :other } }
 
     facade.cached
     facade.cached
 
     assert_equal 1, calls
-    assert_equal %i[cached other], facade.shortcuts
+    assert_equal %i[cached other], facade.briefly.shortcuts
   end
 
   def test_configure_can_memoize_a_previously_declared_shortcut
     calls = 0
     facade = Briefly.define { shortcut(:cached) { calls += 1 } }
-    facade.configure { memoize :cached }
+    facade.briefly.configure { memoize :cached }
 
     facade.cached
     facade.cached
@@ -90,7 +90,7 @@ class CoreTest < BrieflyTest
       shortcut(:boom) { raise "kaboom" }
       rescue_from(RuntimeError, :boom) { :rescued }
     end
-    facade.configure { shortcut(:other) { :other } }
+    facade.briefly.configure { shortcut(:other) { :other } }
 
     assert_equal :rescued, facade.boom
   end
@@ -101,7 +101,7 @@ class CoreTest < BrieflyTest
     facade = Briefly.define { shortcut(:value) { calls += 1 } }
 
     assert_raises(Briefly::Error) do
-      facade.configure do
+      facade.briefly.configure do
         memoize :value
         shortcut(:bad) { |arg| arg }
         memoize :bad
@@ -111,22 +111,22 @@ class CoreTest < BrieflyTest
     3.times { facade.value }
 
     assert_equal 3, calls
-    refute facade.shortcut?(:bad)
+    refute facade.briefly.shortcut?(:bad)
   end
 
   def test_a_raising_configure_does_not_steal_an_alias
     facade = Briefly.define { shortcut(:config, :c) { :value } }
 
     assert_raises(Briefly::Error) do
-      facade.configure do
+      facade.briefly.configure do
         shortcut(:other, :c) { :stolen }
         shortcut(:bad) { |arg| arg }
         memoize :bad
       end
     end
-    facade.configure { shortcut(:unrelated) { :u } }
+    facade.briefly.configure { shortcut(:unrelated) { :u } }
 
-    assert facade.shortcut?(:c)
+    assert facade.briefly.shortcut?(:c)
     assert_equal :value, facade.c
   end
 

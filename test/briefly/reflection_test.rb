@@ -120,17 +120,20 @@ class ReflectionTest < BrieflyTest
     assert_equal 1, facade.send(:"foo bar")
   end
 
-  # R13: no new public method, so `RESERVED` takes no further name out of the shortcut namespace.
+  # R13: management hides behind a single public accessor, so `RESERVED` takes exactly one name — not
+  # five — out of the shortcut namespace. `inspect`/`to_s` are `Object`'s and cost no freedom.
   def test_the_facade_gained_no_public_method
-    assert_equal %i[clear_memos! configure reset! shortcut? shortcuts],
+    assert_equal %i[briefly],
                  (Briefly::Facade.instance_methods - Object.instance_methods).sort
   end
 
   # The other half of R13: `RESERVED` is built from the private helpers too, so one more of those takes
   # one more name out of the shortcut namespace just as surely as a public method would. Compilation
-  # therefore lives in `candor`, not here.
+  # therefore lives in `candor`, not here; the four `__`-prefixed management methods are the deliberate,
+  # `send`-reached surface behind `briefly`, unreachable as shortcuts because they are prefixed.
   def test_the_facade_gained_no_private_helper
-    assert_equal %i[__call __commit __define __handle __install __memo __prepare __remove_methods],
+    assert_equal %i[__call __clear_memos! __commit __configure __define __handle __install __memo
+                    __prepare __remove_methods __shortcut? __shortcuts],
                  (Briefly::Facade.private_instance_methods(false) - %i[initialize]).sort
   end
 
@@ -146,17 +149,27 @@ class ReflectionTest < BrieflyTest
     assert_empty(private_names.reject { |name| name.start_with?("__") })
   end
 
+  # The guard above only bites if a bare private name trips it. A fixture that adds one proves the
+  # check can fail — without it, the management surface could grow an unprefixed private helper (one
+  # more name stolen from the shortcut namespace) and no test would notice.
+  def test_the_prefix_guard_bites_an_unprefixed_private_name
+    leaky = Class.new(Briefly::Facade) { private def leak = nil }
+    private_names = leaky.private_instance_methods(false) - %i[initialize]
+
+    refute_empty(private_names.reject { |name| name.start_with?("__") })
+  end
+
   def test_reconfiguring_emits_no_redefinition_warning
     facade = Briefly.define { shortcut(:env) { "a" } }
 
-    assert_empty(warnings { facade.configure { shortcut(:env) { "b" } } })
+    assert_empty(warnings { facade.briefly.configure { shortcut(:env) { "b" } } })
     assert_equal "b", facade.env
   end
 
   # Guards. Each fails against the fixture carrying the defect it pins.
 
   def test_the_variadic_fixture_reports_a_lie_so_the_parity_guard_bites
-    facade = VariadicFacade.new.configure { shortcut(:add) { |a, b| a + b } }
+    facade = VariadicFacade.new.briefly.configure { shortcut(:add) { |a, b| a + b } }
 
     assert_equal(-1, facade.method(:add).arity)
     assert_equal(%i[rest keyrest block], facade.method(:add).parameters.map(&:first))
@@ -164,9 +177,9 @@ class ReflectionTest < BrieflyTest
   end
 
   def test_the_redefining_fixture_warns_so_the_redefinition_guard_bites
-    facade = RedefiningFacade.new.configure { shortcut(:env) { "a" } }
+    facade = RedefiningFacade.new.briefly.configure { shortcut(:env) { "a" } }
 
-    assert_match(/method redefined/, warnings { facade.configure { shortcut(:env) { "b" } } }.join)
+    assert_match(/method redefined/, warnings { facade.briefly.configure { shortcut(:env) { "b" } } }.join)
   end
 
   # The sentinel marking an unpassed optional must be nameless. `UNSET` is a constant, and

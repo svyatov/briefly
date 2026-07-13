@@ -47,13 +47,13 @@ class PackTest < BrieflyTest
   def test_packs_compose
     facade = Briefly.define { use ComposingPack }
 
-    assert_equal %i[composed leaf], facade.shortcuts
+    assert_equal %i[composed leaf], facade.briefly.shortcuts
   end
 
   def test_use_returns_the_builder_so_packs_can_chain
     facade = Briefly.define { use(LeafPack).use(ComposingPack) }
 
-    assert_equal %i[composed leaf], facade.shortcuts
+    assert_equal %i[composed leaf], facade.briefly.shortcuts
   end
 
   def test_a_pack_receives_the_facade_for_lifecycle_wiring
@@ -74,7 +74,7 @@ class PackTest < BrieflyTest
 
   def test_a_pack_can_be_used_from_configure
     facade = Briefly.define
-    facade.configure { use LeafPack }
+    facade.briefly.configure { use LeafPack }
 
     assert_equal :leaf, facade.leaf
   end

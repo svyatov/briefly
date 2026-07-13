@@ -88,11 +88,17 @@ shortcut(:summary) { "build #{flaky}" }   # caches "build unknown" forever
 memoize :summary                          # <- don't memoize over a rescue-backed shortcut
 ```
 
-Clearing is a neutral primitive:
+Clearing is a neutral primitive. Management lives behind one accessor, `App.briefly`, so names like
+`configure`, `shortcuts`, `shortcut?` and `clear_memos!` stay yours to use as shortcuts:
 
 ```ruby
-App.clear_memos!   # => App     (thread-safe; `reset!` is an alias)
+App.briefly.clear_memos!   # => App     (thread-safe)
 ```
+
+Reclaim one of those names and `App.configure` calls *your* shortcut — the old management call now
+lives only at `App.briefly.configure`. Worth knowing when porting pre-0.2.0 code: a leftover
+`App.configure { ... }` won't raise if a `configure` shortcut exists, it just runs the shortcut and,
+like any non-yielding method, drops the block.
 
 *When* to clear is a pack's business. See [Reloading](#reloading-and-thread-safety).
 
@@ -357,7 +363,7 @@ Admin = Briefly.define do
 end
 ```
 
-It registers `Rails.application.reloader.to_prepare { facade.clear_memos! }`, so memos are dropped
+It registers `Rails.application.reloader.to_prepare { facade.briefly.clear_memos! }`, so memos are dropped
 at boot and on every code reload in development. In production nothing reloads, so they persist for
 the process lifetime. It raises `Briefly::Error` outside a booted app, so call it from an initializer.
 
@@ -383,8 +389,8 @@ allow(App).to receive(:redis).and_return(fake_redis)   # rspec-mocks verifies it
 App.stub(:redis, fake_redis) { ... }                   # minitest
 ```
 
-Call `App.reset!` between examples if a memoized value would leak. `Briefly.errors.clear` resets
-globally registered handlers.
+Call `App.briefly.clear_memos!` between examples if a memoized value would leak. `Briefly.errors.clear`
+resets globally registered handlers.
 
 ## Types
 
