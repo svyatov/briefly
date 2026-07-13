@@ -23,6 +23,7 @@ Layout/LineLength:
 Metrics/AbcSize:
   Exclude:
     - "lib/briefly/facade.rb"
+    - "lib/briefly/rails/config.rb"
     - "lib/briefly/rails/db.rb"
     - "test/**/*"
 

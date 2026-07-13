@@ -1,8 +1,8 @@
 module Briefly
   # Shortcut pack for Rails applications. Loaded only when `Briefly::Rails` is referenced.
   #
-  # An umbrella over `Config`, `Env`, `View` and `Reload`, plus `DB` under the `db` namespace. Each
-  # nested pack exposes `install` and nothing else.
+  # An umbrella over `Config`, `Env`, `View`, `Instrument` and `Reload`, plus `DB` under the `db`
+  # namespace. Each nested pack exposes `install` and nothing else.
   module Rails
     def self?.install: (Builder builder) -> Builder
 
@@ -18,6 +18,11 @@ module Briefly
 
     # Helpers, routes and rendering outside a controller.
     module View
+      def self?.install: (Builder builder) -> Builder
+    end
+
+    # ActiveSupport::Notifications instrumentation.
+    module Instrument
       def self?.install: (Builder builder) -> Builder
     end
 

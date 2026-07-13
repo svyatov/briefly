@@ -255,7 +255,8 @@ Api = Briefly.define { use "myapp/redis", url: "redis://cache:6379" }
 ```
 
 An unregistered name raises `Briefly::UnknownPackError`. The packs this gem ships are registered as
-`"rails"`, `"rails/config"`, `"rails/env"`, `"rails/view"`, `"rails/db"` and `"rails/reload"`.
+`"rails"`, `"rails/config"`, `"rails/env"`, `"rails/view"`, `"rails/db"`, `"rails/instrument"` and
+`"rails/reload"`.
 
 ### `Briefly::Rails`
 
@@ -264,17 +265,26 @@ An unregistered name raises `Briefly::UnknownPackError`. The packs this gem ship
 | `config` | `c` | `Rails.configuration` |
 | `config_x` | `x` | `Rails.configuration.x` |
 | `env` | | `Rails.env` |
-| `production?` `development?` `test?` `local?` | | `Rails.env.*` |
+| `production?` `development?` `test?` `local?` | `prod?` `dev?` | `Rails.env.*` |
 | `root` | | `Rails.root` |
 | `cache` | | `Rails.cache` |
 | `logger` | `log` | `Rails.logger` |
 | `credentials` | `cred` | `Rails.application.credentials` |
+| `error` | | `Rails.error` |
+| `config_for` | | `Rails.application.config_for(name, **opts)` |
 | `helpers` | `h` | `ApplicationController.helpers` |
 | `routes` | `r` | `Rails.application.routes.url_helpers` |
 | `renderer` | | `ApplicationController.renderer` |
 | `render` | | forwards to `renderer.render` |
+| `instrument` | | `ActiveSupport::Notifications.instrument(name, payload) { }` |
 
 Plus `db`, a namespace holding `Briefly::Rails::DB`.
+
+`prod?` and `dev?` alias `production?` and `development?`. `error` is the framework's handled-error
+reporter, so `App.error.report(e)` and `App.error.handle { }` reach it off one live lookup.
+`config_for` reads a per-environment YAML config on every call and forwards any extra keyword (such
+as `env:`) to `Rails.application.config_for`: it takes an argument, so it never memoizes; compose one
+that does with `memoize(:payments) { config_for(:payments) }`.
 
 Requires Rails >= 7.2. There is no `secrets` shortcut: `Rails.application.secrets` was removed in
 7.2. Use `credentials`.
@@ -292,14 +302,15 @@ App = Briefly.define do
 end
 ```
 
-`Briefly::Rails` is an umbrella over four packs, each usable on its own:
+`Briefly::Rails` is an umbrella over five packs, each usable on its own:
 
 | pack | short name | shortcuts |
 |---|---|---|
-| `Briefly::Rails::Config` | `"rails/config"` | `config`, `config_x`, `root`, `cache`, `logger`, `credentials` |
+| `Briefly::Rails::Config` | `"rails/config"` | `config`, `config_x`, `root`, `cache`, `logger`, `credentials`, `error`, `config_for` |
 | `Briefly::Rails::Env` | `"rails/env"` | `env` and its predicates |
 | `Briefly::Rails::View` | `"rails/view"` | `helpers`, `routes`, `renderer`, `render` |
-| `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `query` |
+| `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `query`, `connected_to`, `reading`, `writing` |
+| `Briefly::Rails::Instrument` | `"rails/instrument"` | `instrument` |
 
 ```ruby
 Worker = Briefly.define do
@@ -315,7 +326,10 @@ end
 |---|---|---|
 | `connection` | `conn` | `base.lease_connection` |
 | `transaction` | `txn` | forwards keywords and the block to `base.transaction` |
-| `query` | | `base.with_connection { \|c\| c.exec_query(sql) }` |
+| `query` | | `base.with_connection { \|c\| c.select_all(sql) }` — a read (SELECT) helper |
+| `connected_to` | | forwards every argument to `base.connected_to` (`role:`, `shard:`, `prevent_writes:`) |
+| `reading` | | runs the block under the `:reading` role |
+| `writing` | | runs the block under the `:writing` role |
 
 ```ruby
 App = Briefly.define do
@@ -340,8 +354,34 @@ Binds are bound, never interpolated, so a value like `"x' OR '1'='1"` matches no
 statement is not sanitized on purpose: `sanitize_sql_array` would fall through to its
 `statement % values` branch and raise on the literal `%` above.
 
-`query` uses `with_connection`, so the connection returns to the pool; `connection`/`conn`
-necessarily leases one.
+`query` runs its statement through `select_all`, the read-optimized path Rails recommends for a raw
+SELECT: it returns an `ActiveRecord::Result` without clearing the query cache. That makes `query` a
+read helper by contract — a write still executes, but it's out of scope. It uses `with_connection`,
+so the connection returns to the pool; `connection`/`conn` necessarily leases one.
+
+`reading` and `writing` *route* a block — everything inside runs under that connection role, so you
+send specific reads to a replica or pin a write to the primary:
+
+```ruby
+App.db.reading { App.db.query("select * from reports") }   # runs on the replica
+App.db.writing { Audit.create!(event: "export") }          # pinned to the primary
+```
+
+They're sugar over `connected_to`, which is also a shortcut in its own right and forwards the whole
+Rails surface — any role (not just reading/writing), plus `shard:` and `prevent_writes:`:
+
+```ruby
+App.db.connected_to(role: :analytics) { Report.all.to_a }   # a custom role
+App.db.connected_to(shard: :one) { Order.find(id) }         # a shard
+App.db.reading(shard: :two) { ... }                         # sugar forwards the rest too
+```
+
+The `reading`/`writing` sugar pins its role: a `role:` you pass through it can't win, so `reading`
+always reads. All of this needs a multi-database app: `base` must be `ActiveRecord::Base` or the
+abstract class that declared `connects_to(database: { ... })`. On a concrete model `connected_to`
+raises `NotImplementedError`, and in a single-database app with no matching connection
+`App.db.reading { ... }` raises `ActiveRecord::ConnectionNotDefined` — these are a multi-DB tool, not a
+role flag.
 
 **Pass `base:` as a String, not the class.** A pack is `use`d from an initializer, where naming an
 autoloadable constant is what Rails warns about, and the captured class would go stale on the first

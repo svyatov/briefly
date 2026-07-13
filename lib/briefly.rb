@@ -28,6 +28,7 @@ module Briefly
     "rails/env" => "Briefly::Rails::Env",
     "rails/view" => "Briefly::Rails::View",
     "rails/db" => "Briefly::Rails::DB",
+    "rails/instrument" => "Briefly::Rails::Instrument",
     "rails/reload" => "Briefly::Rails::Reload"
   }
 

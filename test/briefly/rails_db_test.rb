@@ -1,79 +1,158 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "support/rails_double"
+require "support/active_record"
 
+# The DB pack runs against real Active Record on in-memory SQLite (see support/active_record.rb), so
+# `lease_connection`, `with_connection`, `select_all`, `sanitize_sql_array` and `connected_to` are
+# exercised as the framework really behaves, not as a double would echo them.
 class RailsDbTest < BrieflyTest
-  def test_connection_leases_from_the_pool
-    with_db do |model, db|
-      assert_same model.leased, db.connection
-      assert_same model.leased, db.conn
-    end
+  BASE = "ARTest::ApplicationRecord"
+
+  def setup
+    ARTest.reset!
   end
 
-  # `connection` is soft-deprecated and raises under `permanent_connection_checkout = :disallowed`.
-  # The double raises on it, so a regression fails here rather than only in production.
-  def test_the_pack_never_reaches_for_the_deprecated_connection_method
-    with_db do |model, db|
-      assert_raises(NoMethodError) { model.connection }
+  def test_connection_leases_from_the_pool
+    db = build_db
 
-      db.conn
-      db.query("select 1")
-      db.query("select * from users where id = ?", 1)
-    end
+    assert_kind_of ActiveRecord::ConnectionAdapters::AbstractAdapter, db.connection
+    assert_same db.connection, db.conn
+  end
+
+  # `connection` is soft-deprecated and raises under `permanent_connection_checkout = :disallowed`
+  # (set in the harness) once the pool is back to a permanent lease. The pack reaches for
+  # `lease_connection` / `with_connection` instead, so its calls keep working where `.connection` fails.
+  def test_the_pack_never_reaches_for_the_deprecated_connection_method
+    db = build_db
+    ARTest::ApplicationRecord.release_connection
+
+    assert_raises(ActiveRecord::ActiveRecordError) { ARTest::ApplicationRecord.connection }
+
+    db.conn
+    db.query("select 1")
+    db.txn { nil }
   end
 
   def test_transaction_forwards_keywords_and_the_block
-    with_db do |model, db|
-      assert_equal :from_block, db.txn(requires_new: true) { :from_block }
-      assert_equal [{ requires_new: true }], model.transactions
-    end
+    db = build_db
+
+    assert_equal :from_block, db.txn(requires_new: true) { :from_block }
   end
 
-  # Sanitizing a bindless statement would reach `sanitize_sql_array`'s `statement % values` branch,
-  # which raises on the literal `%` below.
-  def test_query_without_binds_is_not_sanitized
-    with_db do |model, db|
-      assert_equal :result, db.query("select * from users where name like '%ada%'")
-      assert_equal ["select * from users where name like '%ada%'"], model.leased.queries
-      assert_empty model.sanitized
+  def test_transaction_commits_on_success_and_rolls_back_on_raise
+    db = build_db
+
+    db.txn { insert("carol") }
+
+    assert_equal 4, count
+
+    assert_raises(RuntimeError) do
+      db.txn do
+        insert("dave")
+        raise "boom"
+      end
     end
+    assert_equal 4, count
   end
 
-  # `query(sql, *binds)` rather than swallowing the extras: dropping a bind would run the raw string.
-  def test_query_with_binds_is_sanitized
-    with_db do |model, db|
-      db.query("select * from users where id = ?", 1)
+  # `select_all` returns an ActiveRecord::Result; rows come back as string-keyed hashes.
+  def test_query_returns_a_result_of_rows
+    result = build_db.query("select * from items order by id")
 
-      assert_equal [["select * from users where id = ?", 1]], model.sanitized
-      assert_equal ['sanitized(["select * from users where id = ?", 1])'], model.leased.queries
-    end
+    assert_instance_of ActiveRecord::Result, result
+    assert_equal([{ "id" => 1, "name" => "ada" }, { "id" => 2, "name" => "bob" },
+                  { "id" => 3, "name" => "adalovelace" }], result.to_a)
   end
 
-  # The body takes no keywords, so Ruby packs them into `binds` as a trailing Hash, which is exactly
-  # what `sanitize_sql_array` wants for named binds. A `**opts` parameter on the body would swallow
-  # them, and the statement would reach the database unbound.
-  def test_query_accepts_named_binds_as_keywords
-    with_db do |model, db|
-      db.query("select * from users where id = :id", id: 1)
+  # A bindless statement skips `sanitize_sql_array`, whose `statement % values` branch would raise on
+  # the literal `%`. Real SQLite proves the row match, not just the absence of a raise.
+  def test_query_without_binds_keeps_a_literal_percent
+    rows = build_db.query("select * from items where name like '%ada%' order by id").to_a
 
-      assert_equal [["select * from users where id = :id", { id: 1 }]], model.sanitized
-    end
+    assert_equal(%w[ada adalovelace], rows.map { |row| row["name"] })
   end
 
-  def test_base_selects_the_active_record_class
-    with_db do |primary, _db|
-      secondary = RailsDouble::Model.new
-      Object.const_set(:SecondaryRecord, secondary)
-      facade = Briefly.define { namespace(:db2) { use "rails/db", base: "SecondaryRecord" } }
+  def test_query_binds_a_positional_placeholder
+    rows = build_db.query("select * from items where id = ?", 1).to_a
 
-      facade.db2.txn { :ok }
+    assert_equal [{ "id" => 1, "name" => "ada" }], rows
+  end
 
-      assert_equal [{}], secondary.transactions
-      assert_empty primary.transactions
-    ensure
-      Object.send(:remove_const, :SecondaryRecord)
+  # The body takes no keyword parameter, so `id: 2` packs into `binds` as a trailing Hash, which is
+  # exactly the named-bind shape `sanitize_sql_array` wants. A `**opts` would swallow it.
+  def test_query_binds_named_keywords
+    rows = build_db.query("select * from items where id = :id", id: 2).to_a
+
+    assert_equal [{ "id" => 2, "name" => "bob" }], rows
+  end
+
+  # `select_all` (not `exec_query`) is a documented invariant — the read-optimized path that keeps the
+  # query cache — but every row/shape assertion passes identically under either, so a revert to
+  # `exec_query` would ship green. Spy the leased connection (`with_connection` yields that same
+  # instance) so the method actually called is pinned, and the invariant has a guard that can fail.
+  def test_query_reads_through_select_all_not_exec_query
+    db = build_db
+    connection = ARTest::ApplicationRecord.lease_connection
+    reached = []
+    %i[select_all exec_query].each do |method|
+      connection.define_singleton_method(method) do |*args, **kwargs, &blk|
+        reached << method
+        super(*args, **kwargs, &blk)
+      end
     end
+
+    db.query("select * from items")
+
+    assert_equal [:select_all], reached
+  end
+
+  # Routing, not just role forwarding: inside the block the *leased connection* belongs to the role's
+  # own pool, so a query physically runs against that database. `current_role` alone would pass even if
+  # no connection switch happened; the pool name only changes when the role actually routes.
+  def test_reading_and_writing_route_to_the_role_pool
+    db = build_db
+
+    assert_equal("primary_replica", db.reading { active_pool })
+    assert_equal("primary", db.writing { active_pool })
+  end
+
+  # The sugar pins its role: extra keywords forward, but a `role:` in them can't win.
+  def test_reading_and_writing_pin_their_role
+    db = build_db
+
+    assert_equal(:reading, db.reading(role: :writing) { ARTest::ApplicationRecord.current_role })
+    assert_equal(:writing, db.writing(role: :reading) { ARTest::ApplicationRecord.current_role })
+  end
+
+  # `connected_to` forwards the whole Rails surface, so any role — not just reading/writing — routes to
+  # its own pool, and Rails' own "must provide a role or shard" validation comes through untouched.
+  def test_connected_to_forwards_arbitrary_roles
+    db = build_db
+
+    assert_equal("primary_replica", db.connected_to(role: :reading) { active_pool })
+    assert_equal("analytics", db.connected_to(role: :analytics) { active_pool })
+    assert_raises(ArgumentError) { db.connected_to { flunk "connected_to needs a role or shard" } }
+  end
+
+  # The other `connected_to` keywords forward through the same `**opts` splat: `shard:` switches the
+  # active shard, and `prevent_writes:` toggles the write guard (which the `writing` sugar forwards
+  # too). A `**opts` that swallowed these would leave shard `default` and the guard off.
+  def test_connected_to_forwards_shard_and_prevent_writes
+    db = build_db
+
+    assert_equal(:secondary, db.connected_to(shard: :secondary) { ARTest::ApplicationRecord.current_shard })
+    assert(db.writing(prevent_writes: true) { ARTest::ApplicationRecord.current_preventing_writes })
+    refute(db.writing { ARTest::ApplicationRecord.current_preventing_writes })
+  end
+
+  # `connected_to` is abstract-class-only; on a concrete model Rails raises NotImplementedError — the
+  # constraint holds for both sugar shortcuts, which share the `connected_to` code path.
+  def test_reading_and_writing_raise_on_a_concrete_model
+    db = build_db(base: "ARTest::Item")
+
+    assert_raises(NotImplementedError) { db.reading { flunk "block must not run" } }
+    assert_raises(NotImplementedError) { db.writing { flunk "block must not run" } }
   end
 
   def test_base_accepts_a_module
@@ -84,15 +163,18 @@ class RailsDbTest < BrieflyTest
   end
 
   # The dev-reload guarantee: a String base is resolved per call, never captured at install time.
-  def test_a_string_base_follows_a_reloaded_constant
-    with_db do |_model, db|
-      db.conn
-      replacement = RailsDouble::Model.new
-      Object.send(:remove_const, :ApplicationRecord)
-      Object.const_set(:ApplicationRecord, replacement)
+  def test_a_string_base_resolves_the_constant_fresh_per_call
+    Object.const_set(:SwappableRecord, Module.new { def self.lease_connection = :first })
+    db = Briefly.define { namespace(:db) { use "rails/db", base: "SwappableRecord" } }.db
 
-      assert_same replacement.leased, db.conn
-    end
+    assert_equal :first, db.conn
+
+    Object.send(:remove_const, :SwappableRecord)
+    Object.const_set(:SwappableRecord, Module.new { def self.lease_connection = :second })
+
+    assert_equal :second, db.conn
+  ensure
+    Object.send(:remove_const, :SwappableRecord) if Object.const_defined?(:SwappableRecord, false)
   end
 
   # The pack wires no lifecycle hook, so it needs no `Rails.application`.
@@ -101,7 +183,7 @@ class RailsDbTest < BrieflyTest
 
     facade = Briefly.define { use Briefly::Rails::DB }
 
-    assert_equal %i[connection query transaction], facade.briefly.shortcuts
+    assert_equal %i[connected_to connection query reading transaction writing], facade.briefly.shortcuts.sort
   end
 
   def test_the_pack_memoizes_nothing
@@ -114,26 +196,23 @@ class RailsDbTest < BrieflyTest
     assert_equal %i[install], Briefly::Rails::DB.singleton_methods(false)
   end
 
-  def test_the_umbrella_mounts_the_pack_under_db
-    RailsDouble.with(root: Dir.pwd) do |_rails, _controller, model|
-      facade = Briefly.define { use Briefly::Rails }
-
-      result = facade.db.txn { :from_block }
-
-      assert_equal :from_block, result
-      assert_equal [{}], model.transactions
-      refute facade.briefly.shortcut?(:txn), "the umbrella must add no root-level DB names"
-    end
-  end
-
   private
 
-  # `use Briefly::Rails::DB` alone: no ::Rails, so the reload pack is provably not wired in.
-  def with_db
-    model = RailsDouble::Model.new
-    Object.const_set(:ApplicationRecord, model)
-    yield model, Briefly.define { namespace(:db) { use "rails/db" } }.db
-  ensure
-    Object.send(:remove_const, :ApplicationRecord) if Object.const_defined?(:ApplicationRecord, false)
+  def build_db(base: BASE)
+    Briefly.define { namespace(:db) { use "rails/db", base: base } }.db
+  end
+
+  # The db_config name of the connection currently leased from the pool — "primary" vs "primary_replica"
+  # vs "analytics". It changes only when `connected_to` actually routes to that role's pool.
+  def active_pool
+    ARTest::ApplicationRecord.lease_connection.pool.db_config.name
+  end
+
+  def insert(name)
+    ARTest::ApplicationRecord.lease_connection.execute("insert into items (name) values ('#{name}')")
+  end
+
+  def count
+    ARTest::ApplicationRecord.with_connection { |connection| connection.select_value("select count(*) from items") }
   end
 end

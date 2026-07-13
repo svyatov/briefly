@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "support/rails_double"
+require "active_support/notifications"
 require "ripper"
 
 class RailsPackTest < BrieflyTest
@@ -28,12 +29,43 @@ class RailsPackTest < BrieflyTest
     end
   end
 
+  # `error` returns the framework's handled-error reporter; `config_for` forwards a per-call YAML read,
+  # threading its options (so `config_for(:x, env: "staging")` reaches the framework).
+  def test_error_and_config_for_reach_the_framework
+    with_rails do |rails, _controller, facade|
+      assert_same rails.error, facade.error
+
+      assert_equal({ config_for: :payments }, facade.config_for(:payments))
+      facade.config_for(:billing, env: "staging")
+
+      assert_equal [[:payments, {}], [:billing, { env: "staging" }]], rails.application.config_for_calls
+
+      assert facade.briefly.shortcut?(:error)
+      assert facade.briefly.shortcut?(:config_for)
+      assert_empty memoized_names(facade)
+      assert_equal "#{LIB}/briefly/rails/config.rb", facade.method(:config_for).source_location.first
+    end
+  end
+
   def test_environment_predicates
     with_rails(env: "production") do |_rails, _controller, facade|
       assert_predicate facade, :production?
       refute_predicate facade, :development?
       refute_predicate facade, :test?
       refute_predicate facade, :local?
+    end
+  end
+
+  # `dev?`/`prod?` are aliases of the canonical predicates: one shared compiled method, one canonical name.
+  def test_dev_and_prod_are_aliases_of_the_canonical_predicates
+    with_rails(env: "production") do |_rails, _controller, facade|
+      assert_equal facade.method(:development?), facade.method(:dev?)
+      assert_equal facade.method(:production?), facade.method(:prod?)
+
+      assert_predicate facade, :prod?
+      refute_predicate facade, :dev?
+      assert facade.briefly.shortcut?(:prod?)
+      assert facade.briefly.shortcut?(:dev?)
     end
   end
 
@@ -96,8 +128,54 @@ class RailsPackTest < BrieflyTest
     refute_empty bare_framework_refs(%(msg = "a # b"; x = Rails.env)), "`#` inside a string literal"
   end
 
+  # A real subscriber captures the event `instrument` fires, and the block's return value survives.
+  def test_instrument_fires_a_notification_and_preserves_the_block_result
+    events = []
+    callback = ->(name, _start, _finish, _id, payload) { events << [name, payload] }
+
+    ActiveSupport::Notifications.subscribed(callback, "evt.name") do
+      facade = Briefly.define { use "rails/instrument" }
+
+      assert_equal :body, facade.instrument("evt.name", key: 1) { :body }
+    end
+
+    assert_equal [["evt.name", { key: 1 }]], events
+  end
+
+  # `payload = {}` is real API: `instrument(name) { }` with no payload must still fire and thread an
+  # empty payload. Compiled arity is strict, so dropping the default would break this — but every other
+  # test passes a payload, leaving that path unexercised while the 100% coverage gate stays green.
+  def test_instrument_defaults_the_payload_when_called_without_one
+    seen = []
+    callback = ->(_name, _start, _finish, _id, payload) { seen << payload }
+
+    ActiveSupport::Notifications.subscribed(callback, "no.payload") do
+      facade = Briefly.define { use "rails/instrument" }
+
+      assert_equal :done, facade.instrument("no.payload") { :done }
+    end
+
+    assert_equal [{}], seen
+  end
+
+  def test_the_umbrella_exposes_instrument
+    with_rails do |_rails, _controller, facade|
+      assert facade.briefly.shortcut?(:instrument)
+
+      events = []
+      callback = ->(_name, _start, _finish, _id, payload) { events << payload }
+
+      ActiveSupport::Notifications.subscribed(callback, "umbrella.evt") do
+        assert_equal :ok, facade.instrument("umbrella.evt", n: 2) { :ok }
+      end
+
+      assert_equal [{ n: 2 }], events
+    end
+  end
+
   def test_only_install_is_public_on_the_pack
-    [Briefly::Rails, Briefly::Rails::Config, Briefly::Rails::Env, Briefly::Rails::View].each do |pack|
+    [Briefly::Rails, Briefly::Rails::Config, Briefly::Rails::Env, Briefly::Rails::View,
+     Briefly::Rails::Instrument].each do |pack|
       assert_equal %i[install], pack.singleton_methods(false), pack.name
     end
   end
@@ -117,8 +195,20 @@ class RailsPackTest < BrieflyTest
     end
   end
 
+  # The umbrella mounts DB under the `db` namespace and burns no root-level names for it. The pack's
+  # own behavior is tested against real Active Record in rails_db_test.
+  def test_the_umbrella_mounts_the_db_pack_under_a_namespace
+    with_rails do |_rails, _controller, facade|
+      assert facade.briefly.shortcut?(:db), "expected a `db` namespace"
+      assert facade.db.briefly.shortcut?(:query), "expected DB shortcuts on the child"
+      refute facade.briefly.shortcut?(:query), "the umbrella must add no root-level DB names"
+      refute facade.briefly.shortcut?(:txn), "the umbrella must add no root-level DB names"
+    end
+  end
+
   def test_the_glob_sees_every_pack_file
     assert_includes pack_sources, File.join(LIB, "briefly/rails/db.rb")
+    assert_includes pack_sources, File.join(LIB, "briefly/rails/instrument.rb")
     assert_includes pack_sources, File.join(LIB, "briefly/rails/reload.rb")
     assert_includes pack_sources, File.join(LIB, "briefly/rails.rb")
   end

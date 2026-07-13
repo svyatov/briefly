@@ -33,65 +33,27 @@ module RailsDouble
     end
   end
 
-  # Records the statements `query` executes.
-  class Connection
-    attr_reader :queries
-
-    def initialize = (@queries = [])
-
-    def exec_query(sql)
-      @queries << sql
-      :result
-    end
-  end
-
-  # Stands in for ApplicationRecord. `lease_connection` and `with_connection` hand out the same
-  # connection, so a test can assert against it either way — reach it as `model.leased`.
-  #
-  # `connection` raises, mirroring a real `ActiveRecord.permanent_connection_checkout = :disallowed`.
-  # Without that, the double answers the soft-deprecated method too, and every DB test stays green
-  # while the pack reaches for an API that raises in production. The invariant needs a double that
-  # can fail it.
-  class Model
-    attr_reader :leased, :transactions, :sanitized
-
-    def initialize
-      @leased = Connection.new
-      @transactions = []
-      @sanitized = []
-    end
-
-    def connection = raise(NoMethodError, "use lease_connection / with_connection")
-
-    def lease_connection = @leased
-
-    def with_connection = yield(@leased)
-
-    def transaction(**opts, &blk)
-      @transactions << opts
-      blk.call
-    end
-
-    def sanitize_sql_array(array)
-      @sanitized << array
-      "sanitized(#{array.inspect})"
-    end
-  end
-
-  # Stands in for Rails.application.
+  # Stands in for Rails.application. `config_for` records the name and options it was called with, so
+  # forwarding can be asserted, and returns a recognizable value.
   class Application
-    attr_reader :credentials, :routes, :reloader
+    attr_reader :credentials, :routes, :reloader, :config_for_calls
 
     def initialize
       @credentials = Object.new
       @routes = Routes.new(Object.new)
       @reloader = Class.new(ActiveSupport::Reloader)
+      @config_for_calls = []
+    end
+
+    def config_for(name, **opts)
+      @config_for_calls << [name, opts]
+      { config_for: name }
     end
   end
 
-  # Stands in for the Rails module itself.
+  # Stands in for the Rails module itself. `error` stands in for the framework's handled-error reporter.
   class Framework
-    attr_reader :configuration, :env, :root, :cache, :logger, :application
+    attr_reader :configuration, :env, :root, :cache, :logger, :application, :error
 
     def initialize(root:, env: "test")
       @configuration = Config.new(Object.new)
@@ -100,17 +62,20 @@ module RailsDouble
       @cache = Object.new
       @logger = Object.new
       @application = Application.new
+      @error = Object.new
     end
   end
 
   # Installs ::Rails, ::ApplicationController and ::ApplicationRecord for the duration of the block.
+  # The DB pack is tested against real Active Record (see support/active_record.rb); here
+  # ApplicationRecord only needs to exist as a constant so the umbrella can mount its `db` namespace.
   #
   # @param root [String] value for Rails.root
   # @param env [String] value for Rails.env
   def self.with(root:, env: "test")
     Object.const_set(:Rails, Framework.new(root: root, env: env))
     Object.const_set(:ApplicationController, Controller.new)
-    Object.const_set(:ApplicationRecord, Model.new)
+    Object.const_set(:ApplicationRecord, Object.new)
     yield ::Rails, ::ApplicationController, ::ApplicationRecord
   ensure
     %i[Rails ApplicationController ApplicationRecord].each do |name|
