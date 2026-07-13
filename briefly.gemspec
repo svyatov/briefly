@@ -18,7 +18,7 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.2.0"
 
   spec.require_paths = ["lib"]
-  spec.files = Dir["lib/**/*.rb"] + Dir["sig/**/*"] +
+  spec.files = Dir["lib/**/*.{rb,tt}"] + Dir["sig/**/*"] +
                %w[.yardopts CHANGELOG.md LICENSE.txt README.md briefly.gemspec]
 
   spec.add_dependency "candor", "~> 0.2.0"

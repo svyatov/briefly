@@ -10,6 +10,9 @@ if ENV["COVERAGE"]
 
   SimpleCov.start do
     add_filter "/test/"
+    # Generators load only under `rails generate` (railties), which this project doesn't depend on, so
+    # they are never required here. Filter them out explicitly rather than let them count as a silent 0.
+    add_filter "/lib/generators/"
     minimum_coverage 100
   end
 end

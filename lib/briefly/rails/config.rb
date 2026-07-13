@@ -11,7 +11,7 @@ module Briefly
     # +error+ is the framework's handled-error reporter: +App.error.report(e)+, +App.error.handle { }+.
     # +config_for+ reads a per-environment YAML config on every call, forwarding any keyword (such as
     # +env:+) to +::Rails.application.config_for+; it takes an argument and is therefore never memoized —
-    # compose one that is with +memoize(:payments) { config_for(:payments) }+.
+    # compose one that is with +shortcut(:payments) { config_for(:payments) }+ then +memoize(:payments)+.
     #
     # Inside this file the framework is always +::Rails+ — bare +Rails+ would resolve to the parent module.
     module Config
