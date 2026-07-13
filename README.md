@@ -34,6 +34,12 @@ gem "briefly"
 Ruby >= 3.2. The one runtime dependency is `candor`. Rails is optional: the gem does not declare
 it, and `Briefly::Rails` is autoloaded only when you name it.
 
+In a Rails app, `rails g briefly:install` writes `config/initializers/briefly.rb` — a working `App`
+facade plus a commented, concern-grouped map of every shortcut the `rails` pack gives you. Pass a
+name (`rails g briefly:install Facade`) to call the constant something else. Re-run it after upgrading
+to refresh the map; Rails prompts before overwriting. The generator loads only under `rails generate`,
+so it adds no runtime dependency.
+
 ## Core concepts
 
 A **facade** is the object `Briefly.define` returns. You assign it to a constant of your choosing;
@@ -284,7 +290,8 @@ Plus `db`, a namespace holding `Briefly::Rails::DB`.
 reporter, so `App.error.report(e)` and `App.error.handle { }` reach it off one live lookup.
 `config_for` reads a per-environment YAML config on every call and forwards any extra keyword (such
 as `env:`) to `Rails.application.config_for`: it takes an argument, so it never memoizes; compose one
-that does with `memoize(:payments) { config_for(:payments) }`.
+that does by declaring a shortcut, then memoizing it: `shortcut(:payments) { config_for(:payments) }`
+then `memoize(:payments)`.
 
 Requires Rails >= 7.2. There is no `secrets` shortcut: `Rails.application.secrets` was removed in
 7.2. Use `credentials`.

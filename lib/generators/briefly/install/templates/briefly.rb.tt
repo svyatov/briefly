@@ -1,0 +1,46 @@
+# frozen_string_literal: true
+
+# briefly — a terse, curated facade over your app's most reached-for objects.
+# Re-run `rails g briefly:install` after upgrading to refresh the map below. It rewrites this whole
+# file (Rails shows a diff first), so keep any shortcuts you add here under version control.
+<%= name %> = Briefly.define do
+  use "rails"
+
+  # Your own shortcuts go here (a body can call the other shortcuts). memoize is a separate line that
+  # annotates an already-declared shortcut — it takes no block:
+  # shortcut(:redis)    { REDIS_POOL }
+  # shortcut(:stripe)   { Stripe::Client.new(x.stripe_key) }
+  # shortcut(:payments) { config_for(:payments) }
+  # memoize(:payments)                                       # compute once (cleared on reload)
+  # rescue_from(Redis::CannotConnectError) { NullCache.new }
+end
+
+# --- What `use "rails"` gives you (call as `<%= name %>.<shortcut>`), by concern ---
+#
+#   config   <%= name %>.config, <%= name %>.c -> Rails.configuration
+#            <%= name %>.config_x, <%= name %>.x -> Rails.configuration.x
+#            <%= name %>.root -> Rails.root
+#            <%= name %>.cache -> Rails.cache
+#            <%= name %>.logger, <%= name %>.log -> Rails.logger
+#            <%= name %>.credentials, <%= name %>.cred -> Rails.application.credentials
+#            <%= name %>.error -> Rails.error (.report(e) / .handle { })
+#            <%= name %>.config_for(:key, env:) -> Rails.application.config_for (env: optional)
+#
+#   env      <%= name %>.env -> Rails.env
+#            <%= name %>.production?, <%= name %>.prod?  <%= name %>.development?, <%= name %>.dev?  <%= name %>.test?  <%= name %>.local?
+#
+#   view     <%= name %>.helpers, <%= name %>.h -> ApplicationController.helpers
+#            <%= name %>.routes, <%= name %>.r -> Rails.application.routes.url_helpers
+#            <%= name %>.renderer -> ApplicationController.renderer
+#            <%= name %>.render(:tmpl, locals:) -> renderer.render
+#
+#   notify   <%= name %>.instrument(event, payload) { } -> ActiveSupport::Notifications
+#
+#   db       <%= name %>.db.connection, <%= name %>.db.conn -> a leased connection
+#            <%= name %>.db.transaction { }, <%= name %>.db.txn { } -> wraps the block in a transaction
+#            <%= name %>.db.query(sql, id: 1) / query(sql, 1) -> a read (SELECT); named or positional binds
+#            <%= name %>.db.connected_to(role:, shard:, prevent_writes:) { }
+#            <%= name %>.db.reading { }, <%= name %>.db.writing { } -> run the block under a role
+#
+# Facades are cheap and share no state — add another for a separate concern:
+#   Db = Briefly.define { use "rails/db" }

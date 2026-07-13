@@ -211,12 +211,17 @@ class RailsPackTest < BrieflyTest
     assert_includes pack_sources, File.join(LIB, "briefly/rails/instrument.rb")
     assert_includes pack_sources, File.join(LIB, "briefly/rails/reload.rb")
     assert_includes pack_sources, File.join(LIB, "briefly/rails.rb")
+    assert_includes pack_sources, File.join(LIB, "generators/briefly/install/install_generator.rb")
   end
 
   private
 
-  # Globbed so a pack file added later cannot slip past `bare_framework_refs`.
-  def pack_sources = Dir[File.join(LIB, "briefly/rails.rb"), File.join(LIB, "briefly/rails/*.rb")].sort
+  # Globbed so a pack file added later cannot slip past `bare_framework_refs` — including a generator
+  # under `Briefly::Generators`, where a bare `Rails` would resolve to the pack just as it does here.
+  def pack_sources
+    Dir[File.join(LIB, "briefly/rails.rb"), File.join(LIB, "briefly/rails/*.rb"),
+        File.join(LIB, "generators/**/*.rb")].sort
+  end
 
   # R9: jump-to-definition on a pack's shortcut lands in the pack, not in the initializer that used it.
   def test_a_pack_shortcut_reports_the_packs_own_file

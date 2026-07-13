@@ -7,10 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Unreleased
 
 ### Added
+- `rails g briefly:install` — a Rails generator that writes `config/initializers/briefly.rb`: a
+  working `App` facade plus a commented, concern-grouped map of every shortcut `use "rails"` installs.
+  Pass a name (`rails g briefly:install Facade`) to rename the constant; re-run it after upgrading to
+  refresh the map, as Rails prompts before overwriting. It loads only under `rails generate`, so no
+  Rails runtime dependency is added.
 - `Briefly::Rails::Config` gains `error` (`Rails.error`, the framework's handled-error reporter) and
   `config_for` (per-environment YAML via `Rails.application.config_for`). Both are live lookups;
-  `config_for` takes an argument, so it never memoizes — compose one that does with
-  `memoize(:x) { config_for(:x) }`.
+  `config_for` takes an argument, so it never memoizes — compose one that does by declaring a shortcut
+  and memoizing it: `shortcut(:x) { config_for(:x) }` then `memoize(:x)`.
 - `Briefly::Rails::DB` gains `connected_to`, `reading` and `writing` for multi-database routing.
   `connected_to` forwards the full Rails surface (`role:`, `shard:`, `prevent_writes:`, custom roles);
   `reading`/`writing` are sugar that pin their role and forward the rest. `base` must be
