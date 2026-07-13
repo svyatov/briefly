@@ -32,7 +32,8 @@ module Briefly
 
     # The management surface, forwarded to the facade's private +__+-prefixed methods. Mutators return
     # the facade so +Briefly.define+-style chaining and the return-self contract hold; readers return
-    # their values. It forwards via +send+, the same seam +Builder+ uses to reach +__commit+.
+    # their values. It forwards via +send+, matching the +child.send(:__commit, …)+ pattern +__commit+
+    # already uses to cross the private boundary.
     class Control
       # @param facade [Facade]
       def initialize(facade) = @facade = facade
