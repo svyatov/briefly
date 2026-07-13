@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require "briefly"
+require "briefly/rails/config"
+require "briefly/rails/env"
+require "briefly/rails/view"
 require "briefly/rails/db"
 require "briefly/rails/reload"
 
@@ -38,54 +41,6 @@ module Briefly
       builder.use(View)
       builder.namespace(:db) { use DB }
       builder
-    end
-
-    # Configuration, paths and the application-wide singletons.
-    module Config
-      module_function
-
-      # @param builder [Briefly::Builder]
-      # @return [Briefly::Builder]
-      def install(builder)
-        builder.shortcut(:config, :c) { ::Rails.configuration }
-        builder.shortcut(:config_x, :x) { ::Rails.configuration.x }
-        builder.shortcut(:root) { ::Rails.root }
-        builder.shortcut(:cache) { ::Rails.cache }
-        builder.shortcut(:logger, :log) { ::Rails.logger }
-        builder.shortcut(:credentials, :cred) { ::Rails.application.credentials }
-        builder
-      end
-    end
-
-    # The environment and its predicates.
-    module Env
-      module_function
-
-      # @param builder [Briefly::Builder]
-      # @return [Briefly::Builder]
-      def install(builder)
-        builder.shortcut(:env) { ::Rails.env }
-        builder.shortcut(:production?) { ::Rails.env.production? }
-        builder.shortcut(:development?) { ::Rails.env.development? }
-        builder.shortcut(:test?) { ::Rails.env.test? }
-        builder.shortcut(:local?) { ::Rails.env.local? }
-        builder
-      end
-    end
-
-    # Helpers, routes and rendering outside a controller.
-    module View
-      module_function
-
-      # @param builder [Briefly::Builder]
-      # @return [Briefly::Builder]
-      def install(builder)
-        builder.shortcut(:helpers, :h) { ::ApplicationController.helpers }
-        builder.shortcut(:routes, :r) { ::Rails.application.routes.url_helpers }
-        builder.shortcut(:renderer) { ::ApplicationController.renderer }
-        builder.shortcut(:render) { |*args, **kwargs, &blk| renderer.render(*args, **kwargs, &blk) }
-        builder
-      end
     end
   end
 end

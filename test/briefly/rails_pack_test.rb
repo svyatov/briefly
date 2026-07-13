@@ -131,7 +131,7 @@ class RailsPackTest < BrieflyTest
   # R9: jump-to-definition on a pack's shortcut lands in the pack, not in the initializer that used it.
   def test_a_pack_shortcut_reports_the_packs_own_file
     with_rails do |_rails, _controller, facade|
-      assert_equal "#{LIB}/briefly/rails.rb", facade.method(:env).source_location.first
+      assert_equal "#{LIB}/briefly/rails/env.rb", facade.method(:env).source_location.first
       assert_equal "#{LIB}/briefly/rails.rb", facade.method(:db).source_location.first
       assert_equal "#{LIB}/briefly/rails/db.rb", facade.db.method(:query).source_location.first
     end
