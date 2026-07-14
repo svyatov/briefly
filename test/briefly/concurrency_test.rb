@@ -13,8 +13,7 @@ class ConcurrencyTest < BrieflyTest
         lock.synchronize { calls += 1 }
         sleep 0.01
         :value
-      end
-      memoize :slow
+      end.memoize
     end
 
     results = race { facade.slow }
@@ -32,13 +31,11 @@ class ConcurrencyTest < BrieflyTest
       shortcut(:inner) do
         inner_calls += 1
         :inner
-      end
-      memoize :inner
+      end.memoize
       shortcut(:outer) do
         outer_calls += 1
         [inner, :outer]
-      end
-      memoize :outer
+      end.memoize
     end
 
     assert_equal %i[inner outer], facade.outer
@@ -56,13 +53,11 @@ class ConcurrencyTest < BrieflyTest
     outer_calls = 0
     lock = Mutex.new
     facade = Briefly.define do
-      shortcut(:inner) { lock.synchronize { inner_calls += 1 } }
-      memoize :inner
+      shortcut(:inner) { lock.synchronize { inner_calls += 1 } }.memoize
       shortcut(:outer) do
         lock.synchronize { outer_calls += 1 }
         inner
-      end
-      memoize :outer
+      end.memoize
     end
 
     race { facade.outer }
@@ -75,8 +70,7 @@ class ConcurrencyTest < BrieflyTest
   # on CRuby, because a reader never observes nil either way. Assert the invariant directly.
   def test_the_memo_store_is_always_an_immutable_snapshot
     facade = Briefly.define do
-      shortcut(:value) { Object.new }
-      memoize :value
+      shortcut(:value) { Object.new }.memoize
     end
 
     assert_predicate memos(facade), :frozen?
@@ -90,8 +84,7 @@ class ConcurrencyTest < BrieflyTest
 
   def test_clearing_memos_concurrently_with_reads_never_tears
     facade = Briefly.define do
-      shortcut(:value) { Object.new }
-      memoize :value
+      shortcut(:value) { Object.new }.memoize
     end
 
     stop = false

@@ -9,8 +9,7 @@ class RailsReloadTest < BrieflyTest
       calls = 0
       facade = Briefly.define do
         use Briefly::Rails::Reload
-        shortcut(:value) { calls += 1 }
-        memoize :value
+        shortcut(:value) { calls += 1 }.memoize
       end
 
       facade.value
@@ -39,8 +38,7 @@ class RailsReloadTest < BrieflyTest
       calls = 0
       facade = Briefly.define do
         use Briefly::Rails
-        shortcut(:policy) { calls += 1 }
-        memoize :policy
+        shortcut(:policy) { calls += 1 }.memoize
       end
       facade.policy
       facade.policy

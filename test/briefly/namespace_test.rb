@@ -68,8 +68,7 @@ class NamespaceTest < BrieflyTest
     calls = 0
     facade = Briefly.define do
       namespace(:db) do
-        shortcut(:pool) { calls += 1 }
-        memoize(:pool)
+        shortcut(:pool) { calls += 1 }.memoize
       end
     end
 
@@ -88,8 +87,7 @@ class NamespaceTest < BrieflyTest
     calls = 0
     facade = Briefly.define do
       namespace(:db) do
-        shortcut(:pool) { calls += 1 }
-        memoize(:pool)
+        shortcut(:pool) { calls += 1 }.memoize
       end
     end
     child = facade.db

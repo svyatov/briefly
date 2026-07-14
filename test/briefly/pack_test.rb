@@ -7,9 +7,7 @@ class PackTest < BrieflyTest
     module_function
 
     def install(builder)
-      builder.shortcut(:leaf) { :leaf }
-      builder.memoize(:leaf)
-      builder.rescue_from(StandardError, :leaf) { :never }
+      builder.shortcut(:leaf) { :leaf }.memoize.rescue_from(StandardError) { :never }
     end
   end
 

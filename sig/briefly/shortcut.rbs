@@ -1,10 +1,12 @@
 module Briefly
-  # One shortcut declaration: its canonical name, its aliases, its body, and whether it memoizes.
-  class Definition
+  # One shortcut, and the object `Builder#shortcut` returns so you can refine it. Its memoization and
+  # its own error handlers live here; `#memoize` and `#rescue_from` are the public refinement surface.
+  class Shortcut
     attr_reader canonical: Symbol
     attr_reader aliases: Array[Symbol]
     attr_reader body: Proc
     attr_reader raw_name: Symbol
+    attr_reader rescues: Array[[ Class, Briefly::handler ]]
 
     # The `[file, line]` the compiled methods report; `Builder#namespace` overwrites it.
     attr_accessor source_location: [ String, Integer ]
@@ -12,9 +14,11 @@ module Briefly
     @memoized: bool
 
     def initialize: (Symbol canonical, Array[Symbol] aliases, Proc body, [ String, Integer ] source_location) -> void
-    def initialize_copy: (Definition other) -> void
-    def memoize!: () -> void
+    def initialize_copy: (Shortcut other) -> void
+    def memoize: () -> self
     def memoized?: () -> bool
+    def rescue_from: (Class error_class) { (StandardError, Symbol) -> untyped } -> self
+    def handler_for: (Exception error) -> Briefly::handler?
     def names: () -> Array[Symbol]
   end
 end

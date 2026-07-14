@@ -5,7 +5,7 @@ module Briefly
     # Names a shortcut may not take.
     RESERVED: Array[Symbol]
 
-    @__defs: Hash[Symbol, Definition]
+    @__defs: Hash[Symbol, Shortcut]
     @__aliases: Hash[Symbol, Symbol]
     @__memos: Hash[Symbol, untyped]
     @__monitor: Monitor
@@ -40,11 +40,11 @@ module Briefly
     def __configure: () ?{ (?) [self: Builder] -> void } -> self
     def __prepare: () -> Builder
     def __commit: (Briefly::plan plan) -> self
-    def __install: (Hash[Symbol, Definition] defs, Array[Briefly::error_entry] error_entries) -> self
+    def __install: (Hash[Symbol, Shortcut] defs, Array[Briefly::error_entry] error_entries) -> self
     def __remove_methods: (Array[Symbol] names) -> void
-    def __define: (Definition defn) -> void
+    def __define: (Shortcut defn) -> void
     def __call: (Symbol name, *untyped, **untyped) ?{ (?) -> untyped } -> untyped
     def __memo: (Symbol name) { () -> untyped } -> untyped
-    def __handle: (StandardError error, Symbol name) -> untyped
+    def __handle: (StandardError error, Shortcut defn) -> untyped
   end
 end

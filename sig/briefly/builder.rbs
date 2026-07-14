@@ -2,7 +2,7 @@ module Briefly
   # Receives the DSL. Blocks are `instance_eval`'d here, never on the facade.
   class Builder
     @facade: Facade
-    @defs: Hash[Symbol, Definition]
+    @defs: Hash[Symbol, Shortcut]
     @children: Hash[Symbol, Facade]
     @errors: Array[Briefly::error_entry]
 
@@ -11,18 +11,18 @@ module Briefly
 
     attr_reader facade: Facade
 
-    def initialize: (Facade facade, Hash[Symbol, Definition] defs, Hash[Symbol, Facade] children) -> void
+    def initialize: (Facade facade, Hash[Symbol, Shortcut] defs, Hash[Symbol, Facade] children) -> void
     def use: (pack_ref pack, **untyped opts) -> self
     def namespace: (Symbol name) { (?) [self: Builder] -> void } -> Symbol
-    def shortcut: (Symbol canonical, *Symbol aliases) { (?) [self: Facade] -> untyped } -> Symbol
-    def memoize: (Symbol name, **untyped opts) -> Symbol
-    def rescue_from: (Class error_class, *(Symbol | Array[Symbol]) names) { (StandardError, Symbol) -> untyped } -> self
+    def shortcut: (Symbol canonical, *Symbol aliases) ?{ (?) [self: Facade] -> untyped } -> Shortcut
+    def rescue_from: (Class error_class, *Symbol names) { (StandardError, Symbol) -> untyped } -> self
     def compile!: () -> Briefly::plan
 
     private
 
+    def source_location_for: (Proc body) -> [ String, Integer ]
     def validate_name!: (untyped name) -> void
     def purge: (Array[Symbol] names, except: Symbol) -> void
-    def fetch: (Symbol name) -> Definition
+    def fetch: (Symbol name) -> Shortcut
   end
 end

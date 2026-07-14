@@ -1,14 +1,16 @@
 # frozen_string_literal: true
 
 module Briefly
-  # An ordered list of +rescue_from+ registrations, queried at dispatch time.
+  # An ordered list of facade-wide and global +rescue_from+ registrations, queried at dispatch time.
+  # A shortcut's own handlers live on the {Briefly::Shortcut}, not here — this holds only the
+  # unscoped handlers a single shortcut cannot voice.
   #
   # Entries are stored oldest-first and returned newest-first, so the most recent registration for a
   # given error class wins. Reads are lock-free against a frozen array; writes rebind it under a
   # mutex, because rebinding alone would drop concurrent registrations.
   class ErrorRegistry
-    # A single registration. +names+ is +nil+ for facade-wide/global handlers.
-    Entry = Struct.new(:klass, :names, :handler)
+    # A single registration.
+    Entry = Struct.new(:klass, :handler)
 
     def initialize
       @entries = [].freeze
@@ -16,20 +18,19 @@ module Briefly
     end
 
     # @param klass [Class] matched against the raised error and its subclasses
-    # @param names [Array<Symbol>, nil] canonical shortcut names, or +nil+ for every shortcut
     # @param handler [Proc] called with +(error, shortcut_name)+
     # @return [self]
-    def add(klass, names, handler)
-      @mutex.synchronize { @entries = [*@entries, Entry.new(klass, names&.freeze, handler)].freeze }
+    def add(klass, handler)
+      @mutex.synchronize { @entries = [*@entries, Entry.new(klass, handler)].freeze }
       self
     end
 
-    # @param name [Symbol] a canonical shortcut name
-    # @return [Array<Entry>] handlers scoped to +name+, most recently registered first
-    def scoped(name) = @entries.reverse_each.select { |entry| entry.names&.include?(name) }
+    # @return [Enumerator<Entry>] every registration, most recently registered first
+    def wide = @entries.reverse_each
 
-    # @return [Array<Entry>] handlers scoped to no shortcut in particular, most recent first
-    def wide = @entries.reverse_each.select { |entry| entry.names.nil? }
+    # @param error [Exception]
+    # @return [Proc, nil] the most recently registered handler whose class matches +error+, or +nil+
+    def handler_for(error) = wide.find { |entry| error.is_a?(entry.klass) }&.handler
 
     # @return [self]
     def clear

@@ -9,7 +9,7 @@ module Briefly
   class Error < StandardError
   end
 
-  # Raised when `memoize` or `rescue_from` names a shortcut that does not exist.
+  # Raised when a bodiless `shortcut` names a shortcut that does not exist.
   class UnknownShortcutError < Error
   end
 
@@ -24,13 +24,13 @@ module Briefly
   # A recovery block. Its return value becomes the shortcut's return value.
   type handler = ^(StandardError error, Symbol shortcut_name) -> untyped
 
-  # A registered error handler, before `ErrorRegistry` receives it.
-  type error_entry = [ Class, Array[Symbol]?, handler ]
+  # A facade-wide error handler, before `ErrorRegistry` receives it.
+  type error_entry = [ Class, handler ]
 
   # A validated `configure` pass, ready to install: definitions, error handlers, namespace children,
   # and one `[child, plan]` pair per namespace this pass collected. Recursive, so RBS types the tail
   # as `untyped`.
-  type plan = [ Hash[Symbol, Definition], Array[error_entry], Hash[Symbol, Facade], Array[[ Facade, untyped ]] ]
+  type plan = [ Hash[Symbol, Shortcut], Array[error_entry], Hash[Symbol, Facade], Array[[ Facade, untyped ]] ]
 
   # A pack is any object responding to `#install(builder)`. Options are optional: Ruby drops an empty
   # `**` splat, so a pack that takes none needs no `**opts` parameter.
@@ -54,4 +54,6 @@ module Briefly
   def self.pack: (String | Symbol name) -> _Pack
   def self.rescue_from: (Class error_class) { (StandardError, Symbol) -> untyped } -> Module
   def self.errors: () -> ErrorRegistry
+
+  private def self.validate_rescue!: (untyped error_class, Proc? handler) -> void
 end

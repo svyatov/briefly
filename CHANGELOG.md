@@ -14,8 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Rails runtime dependency is added.
 - `Briefly::Rails::Config` gains `error` (`Rails.error`, the framework's handled-error reporter) and
   `config_for` (per-environment YAML via `Rails.application.config_for`). Both are live lookups;
-  `config_for` takes an argument, so it never memoizes — compose one that does by declaring a shortcut
-  and memoizing it: `shortcut(:x) { config_for(:x) }` then `memoize(:x)`.
+  `config_for` takes an argument, so it never memoizes — compose one that does by chaining `.memoize`
+  onto a shortcut: `shortcut(:x) { config_for(:x) }.memoize`.
 - `Briefly::Rails::DB` gains `connected_to`, `reading` and `writing` for multi-database routing.
   `connected_to` forwards the full Rails surface (`role:`, `shard:`, `prevent_writes:`, custom roles);
   `reading`/`writing` are sugar that pin their role and forward the rest. `base` must be
@@ -42,10 +42,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The DB pack's tests now run against real Active Record on in-memory SQLite, so its Active Record
   calls are verified rather than mocked. `activerecord` and `sqlite3` join `activesupport` as dev-only
   dependencies; the gem still declares no Rails runtime dependency.
+- **BREAKING:** `shortcut` now returns the `Briefly::Shortcut` it declares instead of the canonical
+  name Symbol. Refine it in place — `shortcut(:x) { ... }.memoize`, `.rescue_from(Error) { fallback }`,
+  in any order — so a shortcut's name is never written twice to annotate it. A bodiless `shortcut(:x)`
+  fetches an already-declared shortcut (canonical or alias) to refine, raising
+  `Briefly::UnknownShortcutError` on an unknown name; it never re-declares. A shortcut's memoization
+  and its own error handlers live on the shortcut itself, so refining it after a redeclaration affects
+  the declaration you named, exactly as its body does.
+- **BREAKING:** The top-level `rescue_from(error_class)` verb is now facade-wide only and takes no
+  shortcut names; passing any raises `ArgumentError` pointing at `shortcut(name).rescue_from(...)`.
+  Scope a handler to a shortcut by chaining `.rescue_from` onto it. Global `Briefly.rescue_from` is
+  unchanged.
 
 ### Removed
 - **BREAKING:** `App.reset!` — use `App.briefly.clear_memos!`. It was a pure alias for `clear_memos!`
   with no internal callers.
+- **BREAKING:** The top-level `memoize` DSL verb — chain `.memoize` onto the shortcut `shortcut`
+  returns (`shortcut(:x) { ... }.memoize`), or `shortcut(:x).memoize` for one declared elsewhere.
+- **BREAKING:** Scoping `rescue_from` by shortcut name on the top-level verb — both single-name
+  `rescue_from(Error, :x)` and multi-name `rescue_from(Error, :a, :b)`. Scope on the shortcut instead:
+  `shortcut(:x).rescue_from(Error) { ... }`, chaining onto each of several.
 
 ## v0.1.0 (2026-07-10)
 

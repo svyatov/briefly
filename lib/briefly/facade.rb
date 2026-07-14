@@ -126,7 +126,7 @@ module Briefly
       @__public = wanted.freeze
       @__defs = defs
       @__aliases = defs.each_value.flat_map { |d| d.aliases.map { |a| [a, d.canonical] } }.to_h
-      error_entries.each { |klass, names, handler| @__errors.add(klass, names, handler) }
+      error_entries.each { |klass, handler| @__errors.add(klass, handler) }
       self
     end
 
@@ -160,7 +160,7 @@ module Briefly
 
         send(defn.raw_name, ...)
       rescue StandardError => e
-        __handle(e, name)
+        __handle(e, defn)
       end
     end
 
@@ -180,15 +180,20 @@ module Briefly
       end
     end
 
-    def __handle(error, name)
-      entry = @__errors.scoped(name).find { |e| error.is_a?(e.klass) } ||
-              @__errors.wide.find { |e| error.is_a?(e.klass) } ||
-              Briefly.errors.wide.find { |e| error.is_a?(e.klass) }
+    # Three tiers, most specific first: this shortcut's own handlers, then the facade-wide ones, then
+    # the global ones. Each container matches its own handlers (newest wins within a tier); this only
+    # picks the first tier that answers.
+    #
+    # @param error [StandardError]
+    # @param defn [Briefly::Shortcut]
+    # @return [Object] the matching handler's return value; if none matches, +error+ is re-raised
+    def __handle(error, defn)
+      handler = defn.handler_for(error) || @__errors.handler_for(error) || Briefly.errors.handler_for(error)
       # Kernel.raise, not bare raise: a shortcut may not be named `raise`, but a pack could still
       # define one on a subclass, and this must never dispatch back into the facade.
-      Kernel.raise(error) unless entry
+      Kernel.raise(error) unless handler
 
-      entry.handler.call(error, name)
+      handler.call(error, defn.canonical)
     end
   end
 

@@ -4,7 +4,7 @@ require "candor"
 
 require "briefly/version"
 require "briefly/errors"
-require "briefly/definition"
+require "briefly/shortcut"
 require "briefly/error_registry"
 require "briefly/facade"
 require "briefly/builder"
@@ -80,14 +80,30 @@ module Briefly
     # @yield [error, shortcut_name] the recovery block; its return value becomes the shortcut's value
     # @return [self]
     def rescue_from(error_class, &handler)
+      validate_rescue!(error_class, handler)
+      @errors.add(error_class, handler)
+      self
+    end
+
+    # The one +rescue_from+ argument check, shared by the global verb here, the facade-wide verb
+    # ({Briefly::Builder#rescue_from}) and the per-shortcut form ({Briefly::Shortcut#rescue_from}), so
+    # the error class must come first, a block is required, and the message never diverges between them.
+    # Private, so it stays off +Briefly+'s public surface; the two cross-class callers reach it with
+    # +Briefly.send(:validate_rescue!, ...)+, the same +send+-to-internal seam {Briefly::Facade::Control} uses.
+    #
+    # @api private
+    # @param error_class [Object] must be a Class
+    # @param handler [Proc, nil] must be present
+    # @return [void]
+    # @raise [ArgumentError] if +error_class+ is not a Class, or no block was given
+    def validate_rescue!(error_class, handler)
       unless error_class.is_a?(Class)
         raise ArgumentError, "rescue_from expects the error class first, got #{error_class.inspect}"
       end
-      raise ArgumentError, "rescue_from(#{error_class}) requires a block" unless handler
 
-      @errors.add(error_class, nil, handler)
-      self
+      raise ArgumentError, "rescue_from(#{error_class}) requires a block" unless handler
     end
+    private :validate_rescue!
 
     # @return [Briefly::ErrorRegistry] the global registry
     attr_reader :errors

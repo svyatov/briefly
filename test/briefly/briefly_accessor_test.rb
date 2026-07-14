@@ -57,8 +57,7 @@ class BrieflyAccessorTest < BrieflyTest
   def test_briefly_clear_memos_returns_the_facade_and_recomputes
     calls = 0
     facade = Briefly.define do
-      shortcut(:n) { calls += 1 }
-      memoize :n
+      shortcut(:n) { calls += 1 }.memoize
     end
     facade.n
     facade.n
@@ -97,11 +96,9 @@ class BrieflyAccessorTest < BrieflyTest
     root_calls = 0
     child_calls = 0
     facade = Briefly.define do
-      shortcut(:val) { root_calls += 1 }
-      memoize :val
+      shortcut(:val) { root_calls += 1 }.memoize
       namespace(:db) do
-        shortcut(:val) { child_calls += 1 }
-        memoize :val
+        shortcut(:val) { child_calls += 1 }.memoize
       end
     end
     facade.val
@@ -134,8 +131,7 @@ class BrieflyAccessorTest < BrieflyTest
     child_calls = 0
     facade = Briefly.define do
       namespace(:db) do
-        shortcut(:val) { child_calls += 1 }
-        memoize :val
+        shortcut(:val) { child_calls += 1 }.memoize
         shortcut(:clear_memos!) { :the_shortcut }
       end
     end
