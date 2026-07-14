@@ -316,7 +316,7 @@ end
 | `Briefly::Rails::Config` | `"rails/config"` | `config`, `config_x`, `root`, `cache`, `logger`, `credentials`, `error`, `config_for` |
 | `Briefly::Rails::Env` | `"rails/env"` | `env` and its predicates |
 | `Briefly::Rails::View` | `"rails/view"` | `helpers`, `routes`, `renderer`, `render` |
-| `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `query`, `connected_to`, `reading`, `writing` |
+| `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `select`, `query`, `connected_to`, `reading`, `writing` |
 | `Briefly::Rails::Instrument` | `"rails/instrument"` | `instrument` |
 
 ```ruby
@@ -331,9 +331,10 @@ end
 
 | shortcut | aliases | value |
 |---|---|---|
-| `connection` | `conn` | `base.lease_connection` |
+| `connection` | `conn` | forwards keywords and the block to `base.with_connection` — yields the connection, auto-releases |
 | `transaction` | `txn` | forwards keywords and the block to `base.transaction` |
-| `query` | | `base.with_connection { \|c\| c.select_all(sql) }` — a read (SELECT) helper |
+| `select` | | `base.with_connection { \|c\| c.select_all(sql) }` — a read (SELECT) on the cache-aware path |
+| `query` | | `base.with_connection { \|c\| c.exec_query(sql) }` — arbitrary SQL, writes and DDL included |
 | `connected_to` | | forwards every argument to `base.connected_to` (`role:`, `shard:`, `prevent_writes:`) |
 | `reading` | | runs the block under the `:reading` role |
 | `writing` | | runs the block under the `:writing` role |
@@ -344,33 +345,43 @@ App = Briefly.define do
   namespace(:db2) { use "rails/db", base: "SecondaryApplicationRecord" }
 end
 
-App.db.txn { App.db.query("select * from users where id = ?", 1) }
-App.db2.conn
+App.db.txn { App.db.select("select * from users where id = ?", 1) }
+App.db.conn { |c| c.select_value("select count(*) from users") }
 ```
 
-`query(sql, *binds)` sanitizes through `base.sanitize_sql_array` when binds are given, and passes the
-statement through untouched when they are not. Positional and named binds both work:
+`select` and `query` are the two raw-SQL helpers, differing only in which adapter path they take.
+`select(sql, *binds)` runs a read through `select_all` — the path Rails recommends for a raw SELECT,
+returning an `ActiveRecord::Result` without clearing the query cache. `query(sql, *binds)` runs
+arbitrary SQL through `exec_query`: reads, writes, and DDL all execute. The name tells you which
+you're reaching for; neither polices the SQL it's handed, so `select` will happily run a write you
+give it — the split is name and cache-path, not a runtime guard.
+
+Both sanitize through `base.sanitize_sql_array` when binds are given, and pass the statement through
+untouched when they are not. Positional and named binds both work:
 
 ```ruby
-App.db.query("select * from users where name like '%ada%'")          # no binds, passed through
-App.db.query("select * from users where id = ?", 123)                # positional
-App.db.query("select * from users where id = :id", id: 123)          # named
+App.db.select("select * from users where name like '%ada%'")         # no binds, passed through
+App.db.select("select * from users where id = ?", 123)               # positional
+App.db.query("update users set active = true where id = :id", id: 1) # named, a write via `query`
 ```
 
 Binds are bound, never interpolated, so a value like `"x' OR '1'='1"` matches nothing. A bindless
 statement is not sanitized on purpose: `sanitize_sql_array` would fall through to its
-`statement % values` branch and raise on the literal `%` above.
+`statement % values` branch and raise on the literal `%` above. That makes binds a safety contract,
+not a convenience: always pass untrusted values as binds. The bindless path is unsanitized, and since
+`query` now runs writes and DDL, an interpolated statement is a destructive-write injection risk, not
+merely a read one.
 
-`query` runs its statement through `select_all`, the read-optimized path Rails recommends for a raw
-SELECT: it returns an `ActiveRecord::Result` without clearing the query cache. That makes `query` a
-read helper by contract — a write still executes, but it's out of scope. It uses `with_connection`,
-so the connection returns to the pool; `connection`/`conn` necessarily leases one.
+`connection`/`conn` mirrors `transaction`: it forwards to `with_connection`, yields the leased
+connection, and auto-releases at block exit, so nothing leaks outside a request. It requires a block —
+there is no bare-lease accessor. Anyone who genuinely needs a held raw lease calls `lease_connection`
+on their model directly.
 
 `reading` and `writing` *route* a block — everything inside runs under that connection role, so you
 send specific reads to a replica or pin a write to the primary:
 
 ```ruby
-App.db.reading { App.db.query("select * from reports") }   # runs on the replica
+App.db.reading { App.db.select("select * from reports") }  # runs on the replica
 App.db.writing { Audit.create!(event: "export") }          # pinned to the primary
 ```
 

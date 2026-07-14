@@ -9,15 +9,15 @@ module Briefly
     #     namespace(:db2) { use Briefly::Rails::DB, base: "SecondaryApplicationRecord" }
     #   end
     #
-    #   App.db.txn { App.db.query("select * from users where id = ?", 1) }
+    #   App.db.txn { App.db.select("select * from users where id = ?", 1) }
     #
     # +base+ is a constant path, resolved on every call. Pass a String, not the class: a pack is
     # +use+d from an initializer, where naming an autoloadable constant is what Rails warns about, and
     # the captured class would go stale on the first code reload — permanently, since {Reload} clears
     # memos, not closures. A Module is accepted for applications outside the autoloader, with that caveat.
     #
-    # Nothing here memoizes: a connection is leased from the pool, and +query+ takes arguments. So the
-    # pack does not wire {Reload}, and works without a booted application.
+    # Nothing here memoizes: the block-form shortcuts can't be memoized, and +select+/+query+ take
+    # arguments. So the pack does not wire {Reload}, and works without a booted application.
     #
     # +connected_to+ forwards every argument to +base.connected_to+ — +role:+, +shard:+, +prevent_writes:+,
     # and any custom role — so the full Rails multi-database surface is reachable. +reading+ and +writing+
@@ -36,16 +36,23 @@ module Briefly
       def install(builder, base: "ApplicationRecord")
         model = -> { base.is_a?(Module) ? base : Object.const_get(base) }
 
-        builder.shortcut(:connection, :conn) { model.call.lease_connection }
+        # `connection`/`conn` mirrors `transaction`: a `with_connection` passthrough that yields the
+        # leased connection and auto-releases at block exit, forwarding every keyword (`prevent_permanent_checkout:`
+        # today, anything Rails adds later). A bare lease would leak outside a request; there is no
+        # `release`, so the block form is the whole story. No block gives a `LocalJumpError` from
+        # Rails' own `with_connection`, which is exactly the "requires a block" contract — no guard needed.
+        builder.shortcut(:connection, :conn) { |**opts, &blk| model.call.with_connection(**opts, &blk) }
         builder.shortcut(:transaction, :txn) { |**opts, &blk| model.call.transaction(**opts, &blk) }
         builder.shortcut(:connected_to) { |**opts, &blk| model.call.connected_to(**opts, &blk) }
         # `**opts` first, `role:` last: the pinned role wins over any `role:` in `opts`, so `reading`
         # always reads, while `shard:` and `prevent_writes:` still forward.
         builder.shortcut(:reading) { |**opts, &blk| connected_to(**opts, role: :reading, &blk) }
         builder.shortcut(:writing) { |**opts, &blk| connected_to(**opts, role: :writing, &blk) }
-        # `select_all`, the read-optimized path for a raw SELECT: it returns an `ActiveRecord::Result`
-        # without clearing the query cache, where `exec_query` is the general read/write form. `query`
-        # is a read helper by contract; a write still runs, but out of scope.
+        # `select` and `query` share one closure, differing only by the adapter method. `select` runs a
+        # read through `select_all` — the read-optimized path for a raw SELECT, returning an
+        # `ActiveRecord::Result` without clearing the query cache. `query` runs arbitrary SQL through
+        # `exec_query` — writes and DDL included. Neither polices the SQL it's given; the split is name
+        # and cache-path, not a runtime read/write guard.
         #
         # `with_connection`, not `connection`: the latter is soft-deprecated, and raises outright under
         # `ActiveRecord.permanent_connection_checkout = :disallowed`.
@@ -53,14 +60,16 @@ module Briefly
         # A bindless statement must skip `sanitize_sql_array`, which would fall through to its
         # `statement % values` branch and raise on any literal `%` — `... like '%foo%'`.
         #
-        # No `**` parameter here, deliberately: taking no keywords is what makes Ruby pack
-        # `query(sql, id: 1)` into `binds` as a trailing Hash, which is how named binds reach
+        # No `**` parameter on either shortcut, deliberately: taking no keywords is what makes Ruby pack
+        # `select(sql, id: 1)` into `binds` as a trailing Hash, which is how named binds reach
         # `sanitize_sql_array`. A `**opts` would swallow them and send the statement unbound.
-        builder.shortcut(:query) do |sql, *binds|
+        run = lambda do |method, sql, binds|
           record = model.call
           statement = binds.empty? ? sql : record.sanitize_sql_array([sql, *binds])
-          record.with_connection { |connection| connection.select_all(statement) }
+          record.with_connection { |connection| connection.public_send(method, statement) }
         end
+        builder.shortcut(:select) { |sql, *binds| run.call(:select_all, sql, binds) }
+        builder.shortcut(:query) { |sql, *binds| run.call(:exec_query, sql, binds) }
         builder
       end
     end

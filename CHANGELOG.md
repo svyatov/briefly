@@ -20,6 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `connected_to` forwards the full Rails surface (`role:`, `shard:`, `prevent_writes:`, custom roles);
   `reading`/`writing` are sugar that pin their role and forward the rest. `base` must be
   `ActiveRecord::Base` or an abstract connection class; a concrete model raises `NotImplementedError`.
+- `Briefly::Rails::DB` gains `select` — a raw-SQL read through `select_all`, returning an
+  `ActiveRecord::Result` on the query-cache-preserving path, with the same positional and named
+  bind-safety as `query`. `query` keeps running arbitrary SQL (writes and DDL included) via `exec_query`.
 - `Briefly::Rails::Env` gains `dev?` and `prod?`, aliases of `development?` and `production?`.
 - `Briefly::Rails::Instrument` — a new `"rails/instrument"` pack with one `instrument` shortcut over
   `ActiveSupport::Notifications.instrument(name, payload) { }`. Usable on its own; `use "rails"`
@@ -31,9 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `App.briefly.clear_memos!`. This frees `configure`, `shortcuts`, `shortcut?` and `clear_memos!` for
   use as your own shortcut names; only `briefly`, `inspect` and `to_s` stay reserved on the facade's
   public surface.
-- `Briefly::Rails::DB#query` now reads through `select_all` instead of `exec_query` — the
-  read-optimized path for a raw SELECT, returning an `ActiveRecord::Result` without clearing the query
-  cache. `query` is a read helper by contract; bind handling is unchanged.
+- **BREAKING:** `Briefly::Rails::DB#connection`/`#conn` is now an auto-releasing block that forwards to
+  `base.with_connection`, yielding the leased connection and releasing it at block exit — the shape of
+  `transaction`. It requires a block; the old bare `base.lease_connection` accessor (held on the thread
+  and never released, a leak outside a request) is gone, with no compatibility shim. Anyone needing a
+  held raw lease calls `lease_connection` on their model directly.
 - The DB pack's tests now run against real Active Record on in-memory SQLite, so its Active Record
   calls are verified rather than mocked. `activerecord` and `sqlite3` join `activesupport` as dev-only
   dependencies; the gem still declares no Rails runtime dependency.

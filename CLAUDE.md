@@ -153,17 +153,34 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
 - **`clear_memos!` cascades into namespace children.** One `Reload` on the root clears the whole tree,
   including a namespace holding no Rails pack. Without this, memoizing inside a namespace pins a value
   across reloads, and no test but `test_clear_memos_cascades_into_namespaces` notices.
-- **`Briefly::Rails::DB#query` reads through `select_all`, not `exec_query`.** `select_all` is the
-  read-optimized path Rails recommends for a raw SELECT, returning an `ActiveRecord::Result` without
-  clearing the query cache. `query` is a read helper by contract; the bindless-skip and no-keyword
-  invariants below are unchanged by the switch — the only edit to the body was the connection method.
-  Pinned by `test_query_reads_through_select_all_not_exec_query`, which spies the leased connection so
-  a revert to `exec_query` fails rather than staying green (row/shape assertions pass under either).
-- **`Briefly::Rails::DB#query` must not sanitize a bindless statement.** `sanitize_sql_array` falls
-  through to a `statement % values` branch that raises on any literal `%` — `... like '%ada%'`.
-- **`Briefly::Rails::DB#query`'s body takes no keyword parameter.** Accepting none is what makes Ruby
-  pack `query(sql, id: 1)` into `binds` as a trailing Hash, which is how named binds reach
-  `sanitize_sql_array`. A `**opts` would swallow them and send the statement to the database unbound.
+- **`Briefly::Rails::DB#select` reads through `select_all`; `#query` runs through `exec_query`.**
+  `select` and `query` share one `install`-local closure that differs by exactly the adapter method it
+  `public_send`s. `select_all` is the read-optimized path Rails recommends for a raw SELECT, returning
+  an `ActiveRecord::Result` without clearing the query cache; `exec_query` is the general form that runs
+  writes and DDL too. The split is name and cache-path, not a runtime read/write guard — `select_all`
+  still executes a write if handed one. Pinned by a matched pair,
+  `test_select_reads_through_select_all_not_exec_query` and `test_query_runs_through_exec_query_not_select_all`,
+  which spy the connection `with_connection` yields so a revert to the wrong method fails rather than
+  staying green (row/shape assertions pass under either).
+- **`Briefly::Rails::DB#connection`/`#conn` is a bare `with_connection` passthrough, structurally the
+  `transaction` line.** Body `{ |**opts, &blk| model.call.with_connection(**opts, &blk) }` — it yields
+  the leased connection, auto-releases at block exit, and forwards every keyword, so the whole
+  `with_connection` surface (`prevent_permanent_checkout:` today) stays reachable. There is deliberately
+  no bare-lease fallback and no `lease`/`release` pair: a held lease leaks outside a request, and the
+  pack ships no `release` to pair it. A call with no block raises `LocalJumpError` from Rails' own
+  `with_connection` — that *is* the "requires a block" contract, so no explicit guard code is needed.
+  Auto-release holds even when the block raises: Rails' `with_connection` ensures the release, so a
+  forgotten guard can't leak the lease. Pinned by
+  `test_connection_yields_a_live_connection_and_returns_the_block_value`,
+  `test_connection_forwards_keywords_to_with_connection`, `test_connection_without_a_block_raises`, and
+  `test_connection_releases_the_lease_when_the_block_raises`.
+- **Neither `Briefly::Rails::DB#select` nor `#query` may sanitize a bindless statement.**
+  `sanitize_sql_array` falls through to a `statement % values` branch that raises on any literal `%` —
+  `... like '%ada%'`. The bindless-skip lives once, in the shared closure, and covers both shortcuts.
+- **Neither `Briefly::Rails::DB#select` nor `#query` declares a keyword parameter.** Accepting none is
+  what makes Ruby pack `select(sql, id: 1)` into `binds` as a trailing Hash, which is how named binds
+  reach `sanitize_sql_array`. A `**opts` would swallow them and send the statement to the database
+  unbound. The `|sql, *binds|` shape is shared by both; changing either to take `**opts` breaks binds.
 - **`Briefly::Rails::DB#connected_to` forwards `**opts` to the resolved base; `#reading` / `#writing`
   pin the role after the splat.** `connected_to` is a faithful passthrough — role, shard, prevent_writes,
   custom roles — so the whole Rails multi-database surface is reachable. `reading`/`writing` are sugar:
@@ -172,9 +189,11 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   `ActiveRecord::Base` or an abstract class — the one that declared `connects_to` — so `base` must be
   such a class; on a concrete model it raises `NotImplementedError`. Pinned by
   `test_reading_and_writing_pin_their_role` and `test_connected_to_forwards_arbitrary_roles`.
-- **`Briefly::Rails::DB` uses `lease_connection` / `with_connection`, never `connection`.** The latter
-  is soft-deprecated and raises under `ActiveRecord.permanent_connection_checkout = :disallowed` — set
-  in the real-AR test harness, so the pack's `.connection`-avoidance is pinned rather than assumed.
+- **`Briefly::Rails::DB` reaches the pool only through `with_connection`, never `connection`.** Every
+  shortcut that touches a connection (`conn`, `select`, `query`) routes through `with_connection`;
+  `.connection` is soft-deprecated and raises under `ActiveRecord.permanent_connection_checkout =
+  :disallowed` — set in the real-AR test harness, so the pack's `.connection`-avoidance is pinned rather
+  than assumed. Pinned by `test_the_pack_never_reaches_for_the_deprecated_connection_method`.
 - **Inside `lib/briefly/rails*.rb` the framework is always `::Rails`.** Bare `Rails` resolves to
   `Briefly::Rails`. `test/briefly/rails_pack_test.rb` lexes the source to enforce this, and has
   fixture tests proving the check bites. It globs the pack files rather than listing them, so a new
@@ -188,7 +207,7 @@ minitest, no RSpec. No dummy Rails app. The forwarding packs (config, env, view,
 run against a hand-rolled `::Rails` double, and the reload test against a real
 `Class.new(ActiveSupport::Reloader)`, so `to_prepare`/`prepare!` semantics are genuinely exercised.
 The DB pack is the exception: it runs against real Active Record on in-memory SQLite
-(`test/support/active_record.rb`), so `lease_connection`, `with_connection`, `select_all`,
+(`test/support/active_record.rb`), so `with_connection`, `select_all`, `exec_query`,
 `sanitize_sql_array` and `connected_to` are exercised as the framework really behaves, not as a double
 would echo them. `activesupport`, `activerecord` and `sqlite3` are the Rails-side dev dependencies; the
 gem still declares no Rails runtime dependency.
