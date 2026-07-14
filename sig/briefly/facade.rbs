@@ -9,8 +9,8 @@ module Briefly
     @__aliases: Hash[Symbol, Symbol]
     @__memos: Hash[Symbol, untyped]
     @__monitor: Monitor
-    @__errors: ErrorRegistry
-    @__public: Array[Symbol]
+    @__rescues: RescueRegistry
+    @__installed: Array[Symbol]
     @__children: Hash[Symbol, Facade]
 
     def initialize: () -> void
@@ -39,8 +39,8 @@ module Briefly
     def __clear_memos!: () -> self
     def __configure: () ?{ (?) [self: Builder] -> void } -> self
     def __prepare: () -> Builder
-    def __commit: (Briefly::plan plan) -> self
-    def __install: (Hash[Symbol, Shortcut] defs, Array[Briefly::error_entry] error_entries) -> self
+    def __commit: (Builder::Plan plan) -> self
+    def __install: (Hash[Symbol, Shortcut] defs, Array[Briefly::rescue_entry] rescue_entries) -> self
     def __remove_methods: (Array[Symbol] names) -> void
     def __define: (Shortcut defn) -> void
     def __call: (Symbol name, *untyped, **untyped) ?{ (?) -> untyped } -> untyped

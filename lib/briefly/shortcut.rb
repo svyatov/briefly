@@ -11,18 +11,23 @@ module Briefly
   # The name, aliases, body and location are internal; {#memoize} and {#rescue_from} are its public
   # refinement surface. It holds no {Briefly::Builder} reference — both refinements are self-contained.
   class Shortcut
+    # @api private
     # @return [Symbol] the primary method name
     attr_reader :canonical
 
+    # @api private
     # @return [Array<Symbol>] additional method names delegating to the same body and memo cell
     attr_reader :aliases
 
+    # @api private
     # @return [Proc] the implementation, bound to the facade at call time
     attr_reader :body
 
+    # @api private
     # @return [Symbol] the private singleton method the body compiles to
     attr_reader :raw_name
 
+    # @api private
     # @return [Array<Array(Class, Proc)>] this shortcut's own error handlers, oldest first
     attr_reader :rescues
 
@@ -32,6 +37,7 @@ module Briefly
     # and a namespace that pointed there would reintroduce, for namespaces, the lie this field exists to
     # remove.
     #
+    # @api private
     # @return [Array(String, Integer)]
     attr_accessor :source_location
 
@@ -69,6 +75,7 @@ module Briefly
       self
     end
 
+    # @api private
     # @return [Boolean]
     def memoized? = @memoized
 
@@ -85,10 +92,12 @@ module Briefly
       self
     end
 
+    # @api private
     # @param error [Exception]
     # @return [Proc, nil] this shortcut's most recently registered handler whose class matches, or +nil+
     def handler_for(error) = @rescues.reverse_each.find { |klass, _| error.is_a?(klass) }&.last
 
+    # @api private
     # @return [Array<Symbol>] canonical name followed by every alias
     def names = [@canonical, *@aliases]
   end

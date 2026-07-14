@@ -14,8 +14,8 @@ module Briefly
       @__aliases = {}
       @__memos = {}.freeze
       @__monitor = Monitor.new
-      @__errors = ErrorRegistry.new
-      @__public = [].freeze
+      @__rescues = RescueRegistry.new
+      @__installed = [].freeze
       @__children = {}
     end
 
@@ -108,25 +108,28 @@ module Briefly
 
     # Installs a validated pass, children first. Nothing here may raise: every check ran in +compile!+.
     #
-    # @param plan [Array] +compile!+'s +[defs, error_entries, children, child_plans]+
+    # @param plan [Briefly::Builder::Plan] a validated +compile!+ pass
     # @return [self]
     def __commit(plan)
-      defs, error_entries, children, child_plans = plan
-      child_plans.each { |child, child_plan| child.send(:__commit, child_plan) }
-      @__children = children
-      __install(defs, error_entries)
+      plan.child_plans.each { |child, child_plan| child.send(:__commit, child_plan) }
+      @__children = plan.children
+      __install(plan.defs, plan.rescue_entries)
     end
 
-    # Compiles definitions onto the singleton class and appends error registrations.
-    def __install(defs, error_entries)
+    # Compiles definitions onto the singleton class and appends rescue registrations.
+    #
+    # @param defs [Hash{Symbol => Briefly::Shortcut}] the validated shortcuts, keyed by canonical name
+    # @param rescue_entries [Array<Array(Class, Proc)>] facade-wide +[error_class, handler]+ pairs
+    # @return [self]
+    def __install(defs, rescue_entries)
       wanted = defs.each_value.flat_map(&:names)
-      __remove_methods(@__public - wanted)
+      __remove_methods(@__installed - wanted)
       defs.each_value { |defn| __define(defn) }
 
-      @__public = wanted.freeze
+      @__installed = wanted.freeze
       @__defs = defs
       @__aliases = defs.each_value.flat_map { |d| d.aliases.map { |a| [a, d.canonical] } }.to_h
-      error_entries.each { |klass, handler| @__errors.add(klass, handler) }
+      rescue_entries.each { |klass, handler| @__rescues.add(klass, handler) }
       self
     end
 
@@ -188,7 +191,7 @@ module Briefly
     # @param defn [Briefly::Shortcut]
     # @return [Object] the matching handler's return value; if none matches, +error+ is re-raised
     def __handle(error, defn)
-      handler = defn.handler_for(error) || @__errors.handler_for(error) || Briefly.errors.handler_for(error)
+      handler = defn.handler_for(error) || @__rescues.handler_for(error) || Briefly.rescues.handler_for(error)
       # Kernel.raise, not bare raise: a shortcut may not be named `raise`, but a pack could still
       # define one on a subclass, and this must never dispatch back into the facade.
       Kernel.raise(error) unless handler

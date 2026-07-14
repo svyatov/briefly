@@ -19,7 +19,7 @@ class VariadicFacade < Briefly::Facade
     canonical = defn.canonical
     dispatch = proc { |*args, **kwargs, &blk| __call(canonical, *args, **kwargs, &blk) }
     defn.names.each do |name|
-      sc.send(:remove_method, name) if @__public.include?(name)
+      sc.send(:remove_method, name) if @__installed.include?(name)
       sc.define_method(name, &dispatch)
     end
   end

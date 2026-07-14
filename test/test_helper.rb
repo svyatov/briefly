@@ -24,7 +24,7 @@ require "briefly"
 # Base class that keeps the process-global handler registry from leaking between examples.
 class BrieflyTest < Minitest::Test
   def teardown
-    Briefly.errors.clear
+    Briefly.rescues.clear
     super
   end
 

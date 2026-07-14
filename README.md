@@ -461,7 +461,7 @@ allow(App).to receive(:redis).and_return(fake_redis)   # rspec-mocks verifies it
 App.stub(:redis, fake_redis) { ... }                   # minitest
 ```
 
-Call `App.briefly.clear_memos!` between examples if a memoized value would leak. `Briefly.errors.clear`
+Call `App.briefly.clear_memos!` between examples if a memoized value would leak. `Briefly.rescues.clear`
 resets globally registered handlers.
 
 ## Types

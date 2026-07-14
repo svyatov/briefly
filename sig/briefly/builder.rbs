@@ -1,10 +1,20 @@
 module Briefly
   # Receives the DSL. Blocks are `instance_eval`'d here, never on the facade.
   class Builder
+    # A validated `compile!` pass, ready for a `Facade` to install.
+    class Plan < ::Struct[untyped]
+      attr_accessor defs: Hash[Symbol, Shortcut]
+      attr_accessor rescue_entries: Array[Briefly::rescue_entry]
+      attr_accessor children: Hash[Symbol, Facade]
+      attr_accessor child_plans: Array[[ Facade, Plan ]]
+
+      def self.new: (Hash[Symbol, Shortcut] defs, Array[Briefly::rescue_entry] rescue_entries, Hash[Symbol, Facade] children, Array[[ Facade, Plan ]] child_plans) -> Plan
+    end
+
     @facade: Facade
     @defs: Hash[Symbol, Shortcut]
     @children: Hash[Symbol, Facade]
-    @errors: Array[Briefly::error_entry]
+    @rescues: Array[Briefly::rescue_entry]
 
     # One collected namespace pass per name, held until `compile!` has validated the whole tree.
     @pending: Hash[Symbol, Builder]
@@ -16,7 +26,7 @@ module Briefly
     def namespace: (Symbol name) { (?) [self: Builder] -> void } -> Symbol
     def shortcut: (Symbol canonical, *Symbol aliases) ?{ (?) [self: Facade] -> untyped } -> Shortcut
     def rescue_from: (Class error_class, *Symbol names) { (StandardError, Symbol) -> untyped } -> self
-    def compile!: () -> Briefly::plan
+    def compile!: () -> Plan
 
     private
 
