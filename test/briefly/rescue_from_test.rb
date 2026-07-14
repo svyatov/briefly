@@ -6,10 +6,10 @@ require "support/variadic_fixture"
 class RescueFromTest < BrieflyTest
   class NotStandard < Exception; end # rubocop:disable Lint/InheritException
 
-  # ErrorRegistry#add without its mutex. Scale alone does not surface the lost update reliably --
+  # RescueRegistry#add without its mutex. Scale alone does not surface the lost update reliably --
   # 8x500 against the unguarded registry loses nothing in 20 runs -- so the read/write window is held
   # open explicitly. Without this fixture the guard below cannot fail, and pins nothing.
-  class UnguardedRegistry < Briefly::ErrorRegistry
+  class UnguardedRegistry < Briefly::RescueRegistry
     def add(klass, handler)
       snapshot = @entries
       Thread.pass
@@ -132,6 +132,20 @@ class RescueFromTest < BrieflyTest
       shortcut(:boom) { raise "kaboom" }
         .rescue_from(StandardError) { :first }
         .rescue_from(StandardError) { :second }
+    end
+
+    assert_equal :second, facade.boom
+  end
+
+  # The level above lives on the Shortcut; this one lives in the RescueRegistry. Two facade-wide
+  # handlers for one class both land in the same registry, and `handler_for` matches newest-first.
+  # Flip `reverse_each` to `each` in rescue_registry.rb and this goes red — the count-only concurrency
+  # tests never would.
+  def test_last_registered_facade_wide_handler_wins
+    facade = Briefly.define do
+      shortcut(:boom) { raise "kaboom" }
+      rescue_from(StandardError) { :first }
+      rescue_from(StandardError) { :second }
     end
 
     assert_equal :second, facade.boom
@@ -281,7 +295,7 @@ class RescueFromTest < BrieflyTest
     threads = 8.times.map { Thread.new { 500.times { Briefly.rescue_from(StandardError) { :x } } } }
     threads.each(&:join)
 
-    assert_equal 4000, Briefly.errors.wide.size
+    assert_equal 4000, Briefly.rescues.size
   end
 
   def test_an_unguarded_registry_really_does_lose_concurrent_registrations
@@ -289,15 +303,15 @@ class RescueFromTest < BrieflyTest
     threads = 4.times.map { Thread.new { 50.times { registry.add(StandardError, proc { :x }) } } }
     threads.each(&:join)
 
-    assert_operator registry.wide.size, :<, 200,
+    assert_operator registry.size, :<, 200,
                     "the fixture must lose entries, otherwise the guard above proves nothing"
   end
 
   # The test above proves a lost update is detectable; it cannot prove #add still guards against one,
   # because the race almost never fires at a scale a suite can afford. Pin the mutex directly: hold it,
-  # and #add must block. Delete the synchronize in error_registry.rb and this goes red.
+  # and #add must block. Delete the synchronize in rescue_registry.rb and this goes red.
   def test_add_holds_the_mutex_while_rebinding_entries
-    registry = Briefly::ErrorRegistry.new
+    registry = Briefly::RescueRegistry.new
     mutex = registry.instance_variable_get(:@mutex)
     mutex.lock
     writer = Thread.new { registry.add(StandardError, proc { :x }) }
@@ -307,7 +321,7 @@ class RescueFromTest < BrieflyTest
     writer.join
 
     assert blocked, "#add must hold @mutex while rebinding @entries"
-    assert_equal 1, registry.wide.size
+    assert_equal 1, registry.size
   end
 
   # A shortcut's public method carries the body's arity, so a bad call raises at the call site, before

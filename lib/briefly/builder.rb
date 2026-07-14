@@ -6,6 +6,11 @@ module Briefly
   #
   # The block only collects; {#compile!} then validates, and {Briefly::Facade::Control#configure} installs.
   class Builder
+    # A validated {#compile!} pass, ready for a {Briefly::Facade} to install. +child_plans+ holds one
+    # +[child_facade, child_plan]+ pair per namespace this pass collected, so +__commit+ can walk the
+    # tree children first.
+    Plan = Struct.new(:defs, :rescue_entries, :children, :child_plans)
+
     # @return [Briefly::Facade] the facade under construction, for packs that need lifecycle hooks
     attr_reader :facade
 
@@ -17,7 +22,7 @@ module Briefly
       @facade = facade
       @defs = defs
       @children = children
-      @errors = []
+      @rescues = []
       @pending = {}
     end
 
@@ -121,7 +126,7 @@ module Briefly
                              "names for a facade-wide handler"
       end
 
-      @errors << [error_class, block]
+      @rescues << [error_class, block]
       self
     end
 
@@ -130,7 +135,7 @@ module Briefly
     # of it is installed.
     #
     # @api private
-    # @return [Array] +[definitions, error_entries, children, child_plans]+
+    # @return [Briefly::Builder::Plan]
     # @raise [Briefly::Error] if a memoized shortcut's body takes arguments
     def compile!
       @defs.each_value do |defn|
@@ -139,7 +144,7 @@ module Briefly
 
         raise Error, "cannot memoize #{defn.canonical}: its body takes arguments"
       end
-      [@defs, @errors, @children, @pending.map { |name, builder| [@children[name], builder.compile!] }]
+      Plan.new(@defs, @rescues, @children, @pending.map { |name, builder| [@children[name], builder.compile!] })
     end
 
     private
