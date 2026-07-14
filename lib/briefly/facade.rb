@@ -117,6 +117,10 @@ module Briefly
     end
 
     # Compiles definitions onto the singleton class and appends rescue registrations.
+    #
+    # @param defs [Hash{Symbol => Briefly::Shortcut}] the validated shortcuts, keyed by canonical name
+    # @param rescue_entries [Array<Array(Class, Proc)>] facade-wide +[error_class, handler]+ pairs
+    # @return [self]
     def __install(defs, rescue_entries)
       wanted = defs.each_value.flat_map(&:names)
       __remove_methods(@__installed - wanted)
