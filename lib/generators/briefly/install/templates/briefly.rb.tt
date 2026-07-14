@@ -36,9 +36,10 @@ end
 #
 #   notify   <%= name %>.instrument(event, payload) { } -> ActiveSupport::Notifications
 #
-#   db       <%= name %>.db.connection, <%= name %>.db.conn -> a leased connection
+#   db       <%= name %>.db.connection { |c| }, <%= name %>.db.conn { |c| } -> yields a connection, auto-releases
 #            <%= name %>.db.transaction { }, <%= name %>.db.txn { } -> wraps the block in a transaction
-#            <%= name %>.db.query(sql, id: 1) / query(sql, 1) -> a read (SELECT); named or positional binds
+#            <%= name %>.db.select(sql, id: 1) / select(sql, 1) -> a read (SELECT); named or positional binds
+#            <%= name %>.db.query(sql, id: 1) / query(sql, 1) -> arbitrary SQL (writes, DDL); same binds
 #            <%= name %>.db.connected_to(role:, shard:, prevent_writes:) { }
 #            <%= name %>.db.reading { }, <%= name %>.db.writing { } -> run the block under a role
 #

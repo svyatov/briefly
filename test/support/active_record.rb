@@ -2,14 +2,14 @@
 
 require "active_record"
 
-# A real Active Record environment on in-memory SQLite, so the DB pack's calls — `lease_connection`,
-# `with_connection`, `select_all`, `sanitize_sql_array`, `connected_to` — run against the framework
+# A real Active Record environment on in-memory SQLite, so the DB pack's calls — `with_connection`,
+# `select_all`, `exec_query`, `sanitize_sql_array`, `connected_to` — run against the framework
 # instead of a double that echoes any method. The forwarding packs keep the lightweight `::Rails`
 # double; only the DB pack earns a real backend, and this is where a wrong AR call actually fails.
 #
 # The base lives under `ARTest` so it never collides with the top-level `ApplicationRecord` that
 # `RailsDouble.with` sets and removes. `permanent_connection_checkout = :disallowed` mirrors the
-# production setting under which `.connection` raises, so the pack's `lease_connection` discipline is
+# production setting under which `.connection` raises, so the pack's `with_connection` discipline is
 # verified rather than assumed.
 module ARTest
   # A distinct in-memory database per role, each its own connection pool, so `connected_to(role:)`

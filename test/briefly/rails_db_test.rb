@@ -4,8 +4,8 @@ require "test_helper"
 require "support/active_record"
 
 # The DB pack runs against real Active Record on in-memory SQLite (see support/active_record.rb), so
-# `lease_connection`, `with_connection`, `select_all`, `sanitize_sql_array` and `connected_to` are
-# exercised as the framework really behaves, not as a double would echo them.
+# `with_connection`, `select_all`, `exec_query`, `sanitize_sql_array` and `connected_to` are exercised
+# as the framework really behaves, not as a double would echo them.
 class RailsDbTest < BrieflyTest
   BASE = "ARTest::ApplicationRecord"
 
@@ -13,23 +13,62 @@ class RailsDbTest < BrieflyTest
     ARTest.reset!
   end
 
-  def test_connection_leases_from_the_pool
+  # `connection`/`conn` is a `with_connection` passthrough: it yields the leased connection and returns
+  # the block's value. The connection is live — a query inside the block runs against the database.
+  def test_connection_yields_a_live_connection_and_returns_the_block_value
     db = build_db
 
-    assert_kind_of ActiveRecord::ConnectionAdapters::AbstractAdapter, db.connection
-    assert_same db.connection, db.conn
+    assert_kind_of(ActiveRecord::ConnectionAdapters::AbstractAdapter, db.connection { |c| c })
+    assert_equal(1, db.conn { |connection| connection.select_value("select 1") })
+  end
+
+  # The passthrough forwards every keyword to `with_connection`, so anything Rails accepts there
+  # (`prevent_permanent_checkout:` today) reaches it. A module double records the opts it received.
+  def test_connection_forwards_keywords_to_with_connection
+    received = nil
+    model = Module.new do
+      define_singleton_method(:with_connection) do |**opts, &blk|
+        received = opts
+        blk.call(:leased)
+      end
+    end
+    db = Briefly.define { namespace(:db) { use Briefly::Rails::DB, base: model } }.db
+
+    assert_equal :leased, db.connection(prevent_permanent_checkout: true) { |c| c }
+    assert_equal({ prevent_permanent_checkout: true }, received)
+  end
+
+  # No bare-lease fallback: `with_connection` yields, so a call with no block raises `LocalJumpError`
+  # from Rails rather than returning a held, never-released connection.
+  def test_connection_without_a_block_raises
+    db = build_db
+
+    assert_raises(LocalJumpError) { db.connection }
+  end
+
+  # The auto-release contract holds even when the block raises: the connection returns to the pool
+  # instead of leaking, which is the whole reason `connection` is a `with_connection` block and not a
+  # bare lease. Rails' `with_connection` ensures the release; pinned here so the passthrough can't
+  # regress into a leak.
+  def test_connection_releases_the_lease_when_the_block_raises
+    db = build_db
+
+    assert_raises(RuntimeError) { db.connection { raise "boom" } }
+
+    refute_predicate ARTest::ApplicationRecord.connection_pool, :active_connection?
   end
 
   # `connection` is soft-deprecated and raises under `permanent_connection_checkout = :disallowed`
   # (set in the harness) once the pool is back to a permanent lease. The pack reaches for
-  # `lease_connection` / `with_connection` instead, so its calls keep working where `.connection` fails.
+  # `with_connection` instead, so its calls keep working where `.connection` fails.
   def test_the_pack_never_reaches_for_the_deprecated_connection_method
     db = build_db
     ARTest::ApplicationRecord.release_connection
 
     assert_raises(ActiveRecord::ActiveRecordError) { ARTest::ApplicationRecord.connection }
 
-    db.conn
+    db.conn { |c| c }
+    db.select("select 1")
     db.query("select 1")
     db.txn { nil }
   end
@@ -57,8 +96,8 @@ class RailsDbTest < BrieflyTest
   end
 
   # `select_all` returns an ActiveRecord::Result; rows come back as string-keyed hashes.
-  def test_query_returns_a_result_of_rows
-    result = build_db.query("select * from items order by id")
+  def test_select_returns_a_result_of_rows
+    result = build_db.select("select * from items order by id")
 
     assert_instance_of ActiveRecord::Result, result
     assert_equal([{ "id" => 1, "name" => "ada" }, { "id" => 2, "name" => "bob" },
@@ -67,22 +106,22 @@ class RailsDbTest < BrieflyTest
 
   # A bindless statement skips `sanitize_sql_array`, whose `statement % values` branch would raise on
   # the literal `%`. Real SQLite proves the row match, not just the absence of a raise.
-  def test_query_without_binds_keeps_a_literal_percent
-    rows = build_db.query("select * from items where name like '%ada%' order by id").to_a
+  def test_select_without_binds_keeps_a_literal_percent
+    rows = build_db.select("select * from items where name like '%ada%' order by id").to_a
 
     assert_equal(%w[ada adalovelace], rows.map { |row| row["name"] })
   end
 
-  def test_query_binds_a_positional_placeholder
-    rows = build_db.query("select * from items where id = ?", 1).to_a
+  def test_select_binds_a_positional_placeholder
+    rows = build_db.select("select * from items where id = ?", 1).to_a
 
     assert_equal [{ "id" => 1, "name" => "ada" }], rows
   end
 
   # The body takes no keyword parameter, so `id: 2` packs into `binds` as a trailing Hash, which is
   # exactly the named-bind shape `sanitize_sql_array` wants. A `**opts` would swallow it.
-  def test_query_binds_named_keywords
-    rows = build_db.query("select * from items where id = :id", id: 2).to_a
+  def test_select_binds_named_keywords
+    rows = build_db.select("select * from items where id = :id", id: 2).to_a
 
     assert_equal [{ "id" => 2, "name" => "bob" }], rows
   end
@@ -91,20 +130,41 @@ class RailsDbTest < BrieflyTest
   # query cache — but every row/shape assertion passes identically under either, so a revert to
   # `exec_query` would ship green. Spy the leased connection (`with_connection` yields that same
   # instance) so the method actually called is pinned, and the invariant has a guard that can fail.
-  def test_query_reads_through_select_all_not_exec_query
-    db = build_db
-    connection = ARTest::ApplicationRecord.lease_connection
-    reached = []
-    %i[select_all exec_query].each do |method|
-      connection.define_singleton_method(method) do |*args, **kwargs, &blk|
-        reached << method
-        super(*args, **kwargs, &blk)
-      end
-    end
+  def test_select_reads_through_select_all_not_exec_query
+    reached = spy_adapter_methods
 
-    db.query("select * from items")
+    build_db.select("select * from items")
 
     assert_equal [:select_all], reached
+  end
+
+  # `query`'s sibling invariant: it runs the general path through `exec_query`, not `select_all`. Same
+  # spy technique, opposite expectation — the guard fails if the method is swapped.
+  def test_query_runs_through_exec_query_not_select_all
+    reached = spy_adapter_methods
+
+    build_db.query("select * from items")
+
+    assert_equal [:exec_query], reached
+  end
+
+  # `query` runs arbitrary SQL, not just reads: an UPDATE executes and persists.
+  def test_query_executes_a_write
+    db = build_db
+
+    db.query("update items set name = 'ADA' where id = 1")
+
+    assert_equal "ADA", db.select("select name from items where id = 1").to_a.first["name"]
+  end
+
+  # A write keeps the same bind-safety as a read: named binds reach `sanitize_sql_array` and are
+  # quoted, not interpolated — an apostrophe round-trips instead of breaking the SQL.
+  def test_query_binds_named_keywords_on_a_write
+    db = build_db
+
+    db.query("update items set name = :name where id = :id", name: "O'Hara", id: 2)
+
+    assert_equal "O'Hara", db.select("select name from items where id = 2").to_a.first["name"]
   end
 
   # Routing, not just role forwarding: inside the block the *leased connection* belongs to the role's
@@ -156,23 +216,23 @@ class RailsDbTest < BrieflyTest
   end
 
   def test_base_accepts_a_module
-    model = Module.new { def self.lease_connection = :leased }
+    model = Module.new { def self.with_connection(**) = yield(:leased) }
     facade = Briefly.define { namespace(:db) { use Briefly::Rails::DB, base: model } }
 
-    assert_equal :leased, facade.db.conn
+    assert_equal(:leased, facade.db.conn { |c| c })
   end
 
   # The dev-reload guarantee: a String base is resolved per call, never captured at install time.
   def test_a_string_base_resolves_the_constant_fresh_per_call
-    Object.const_set(:SwappableRecord, Module.new { def self.lease_connection = :first })
+    Object.const_set(:SwappableRecord, Module.new { def self.with_connection(**) = yield(:first) })
     db = Briefly.define { namespace(:db) { use "rails/db", base: "SwappableRecord" } }.db
 
-    assert_equal :first, db.conn
+    assert_equal(:first, db.conn { |c| c })
 
     Object.send(:remove_const, :SwappableRecord)
-    Object.const_set(:SwappableRecord, Module.new { def self.lease_connection = :second })
+    Object.const_set(:SwappableRecord, Module.new { def self.with_connection(**) = yield(:second) })
 
-    assert_equal :second, db.conn
+    assert_equal(:second, db.conn { |c| c })
   ensure
     Object.send(:remove_const, :SwappableRecord) if Object.const_defined?(:SwappableRecord, false)
   end
@@ -183,7 +243,7 @@ class RailsDbTest < BrieflyTest
 
     facade = Briefly.define { use Briefly::Rails::DB }
 
-    assert_equal %i[connected_to connection query reading transaction writing], facade.briefly.shortcuts.sort
+    assert_equal %i[connected_to connection query reading select transaction writing], facade.briefly.shortcuts.sort
   end
 
   def test_the_pack_memoizes_nothing
@@ -200,6 +260,25 @@ class RailsDbTest < BrieflyTest
 
   def build_db(base: BASE)
     Briefly.define { namespace(:db) { use "rails/db", base: base } }.db
+  end
+
+  # Wraps `select_all` and `exec_query` on the currently-leased connection so each call is recorded.
+  # `with_connection` yields this same held instance, so the spy sees whichever method the pack picks.
+  # Prepended (not `define_singleton_method`) so two spy tests reusing the pooled connection don't warn
+  # about redefining a singleton method.
+  def spy_adapter_methods
+    connection = ARTest::ApplicationRecord.lease_connection
+    reached = []
+    recorder = Module.new do
+      %i[select_all exec_query].each do |method|
+        define_method(method) do |*args, **kwargs, &blk|
+          reached << method
+          super(*args, **kwargs, &blk)
+        end
+      end
+    end
+    connection.singleton_class.prepend(recorder)
+    reached
   end
 
   # The db_config name of the connection currently leased from the pool — "primary" vs "primary_replica"
