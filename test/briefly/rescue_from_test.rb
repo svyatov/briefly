@@ -10,18 +10,17 @@ class RescueFromTest < BrieflyTest
   # 8x500 against the unguarded registry loses nothing in 20 runs -- so the read/write window is held
   # open explicitly. Without this fixture the guard below cannot fail, and pins nothing.
   class UnguardedRegistry < Briefly::ErrorRegistry
-    def add(klass, names, handler)
+    def add(klass, handler)
       snapshot = @entries
       Thread.pass
-      @entries = [*snapshot, Entry.new(klass, names&.freeze, handler)].freeze
+      @entries = [*snapshot, Entry.new(klass, handler)].freeze
       self
     end
   end
 
   def test_handler_return_value_becomes_the_shortcut_value
     facade = Briefly.define do
-      shortcut(:boom) { raise "kaboom" }
-      rescue_from(StandardError, :boom) { "unknown" }
+      shortcut(:boom) { raise "kaboom" }.rescue_from(StandardError) { "unknown" }
     end
 
     assert_equal "unknown", facade.boom
@@ -29,8 +28,7 @@ class RescueFromTest < BrieflyTest
 
   def test_handler_receives_the_error_and_the_shortcut_name
     facade = Briefly.define do
-      shortcut(:boom) { raise "kaboom" }
-      rescue_from(StandardError, :boom) { |error, name| [error.message, name] }
+      shortcut(:boom) { raise "kaboom" }.rescue_from(StandardError) { |error, name| [error.message, name] }
     end
 
     assert_equal ["kaboom", :boom], facade.boom
@@ -38,8 +36,7 @@ class RescueFromTest < BrieflyTest
 
   def test_handler_may_take_only_the_error
     facade = Briefly.define do
-      shortcut(:boom) { raise "kaboom" }
-      rescue_from(StandardError, :boom) { |error| error.message }
+      shortcut(:boom) { raise "kaboom" }.rescue_from(StandardError) { |error| error.message }
     end
 
     assert_equal "kaboom", facade.boom
@@ -50,8 +47,7 @@ class RescueFromTest < BrieflyTest
   def test_a_handler_is_not_bound_to_the_facade
     facade = Briefly.define do
       shortcut(:logger) { :facade_logger }
-      shortcut(:boom) { raise "kaboom" }
-      rescue_from(StandardError, :boom) { self }
+      shortcut(:boom) { raise "kaboom" }.rescue_from(StandardError) { self }
     end
 
     assert_instance_of Briefly::Builder, facade.boom
@@ -59,8 +55,7 @@ class RescueFromTest < BrieflyTest
 
   def test_a_reraising_handler_propagates
     facade = Briefly.define do
-      shortcut(:boom) { raise "kaboom" }
-      rescue_from(StandardError, :boom) { |error| raise error }
+      shortcut(:boom) { raise "kaboom" }.rescue_from(StandardError) { |error| raise error }
     end
 
     assert_equal "kaboom", assert_raises(RuntimeError) { facade.boom }.message
@@ -91,8 +86,7 @@ class RescueFromTest < BrieflyTest
 
   def test_errors_outside_standard_error_always_propagate
     facade = Briefly.define do
-      shortcut(:boom) { raise NotStandard }
-      rescue_from(Exception, :boom) { :never }
+      shortcut(:boom) { raise NotStandard }.rescue_from(Exception) { :never }
     end
 
     assert_raises(NotStandard) { facade.boom }
@@ -100,8 +94,7 @@ class RescueFromTest < BrieflyTest
 
   def test_subclasses_match
     facade = Briefly.define do
-      shortcut(:boom) { raise ArgumentError }
-      rescue_from(StandardError, :boom) { :caught }
+      shortcut(:boom) { raise ArgumentError }.rescue_from(StandardError) { :caught }
     end
 
     assert_equal :caught, facade.boom
@@ -109,8 +102,7 @@ class RescueFromTest < BrieflyTest
 
   def test_a_narrower_class_does_not_match_a_wider_error
     facade = Briefly.define do
-      shortcut(:boom) { raise "kaboom" }
-      rescue_from(ArgumentError, :boom) { :never }
+      shortcut(:boom) { raise "kaboom" }.rescue_from(ArgumentError) { :never }
     end
 
     assert_raises(RuntimeError) { facade.boom }
@@ -119,28 +111,17 @@ class RescueFromTest < BrieflyTest
   def test_scoping_to_other_shortcuts_does_not_apply
     facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
-      shortcut(:fine) { :fine }
-      rescue_from(StandardError, :fine) { :never }
+      shortcut(:fine) { :fine }.rescue_from(StandardError) { :never }
     end
 
     assert_raises(RuntimeError) { facade.boom }
   end
 
-  def test_names_may_be_given_as_an_array
-    facade = Briefly.define do
-      shortcut(:a) { raise "a" }
-      shortcut(:b) { raise "b" }
-      rescue_from(StandardError, %i[a b]) { |error| error.message }
-    end
-
-    assert_equal "a", facade.a
-    assert_equal "b", facade.b
-  end
-
-  def test_names_may_be_aliases
+  # A bodiless `shortcut(alias)` resolves through the alias to the canonical shortcut.
+  def test_a_shortcut_may_be_fetched_through_an_alias
     facade = Briefly.define do
       shortcut(:config, :c) { raise "kaboom" }
-      rescue_from(StandardError, :c) { :caught }
+      shortcut(:c).rescue_from(StandardError) { :caught }
     end
 
     assert_equal :caught, facade.config
@@ -149,17 +130,16 @@ class RescueFromTest < BrieflyTest
   def test_last_registered_wins_within_a_level
     facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
-      rescue_from(StandardError, :boom) { :first }
-      rescue_from(StandardError, :boom) { :second }
+        .rescue_from(StandardError) { :first }
+        .rescue_from(StandardError) { :second }
     end
 
     assert_equal :second, facade.boom
   end
 
-  def test_facade_scoped_beats_facade_wide_regardless_of_order
+  def test_a_shortcuts_own_handler_beats_facade_wide_regardless_of_order
     facade = Briefly.define do
-      shortcut(:boom) { raise "kaboom" }
-      rescue_from(StandardError, :boom) { :scoped }
+      shortcut(:boom) { raise "kaboom" }.rescue_from(StandardError) { :scoped }
       rescue_from(StandardError) { :wide }
     end
 
@@ -197,7 +177,7 @@ class RescueFromTest < BrieflyTest
   def test_do_end_form_binds_the_block
     facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
-      rescue_from StandardError, :boom do |error|
+      rescue_from StandardError do |error|
         error.message
       end
     end
@@ -208,7 +188,7 @@ class RescueFromTest < BrieflyTest
   def test_parens_and_braces_form_binds_the_block
     facade = Briefly.define do
       shortcut(:boom) { raise "kaboom" }
-      rescue_from(StandardError, :boom) { |error| error.message }
+      rescue_from(StandardError) { |error| error.message }
     end
 
     assert_equal "kaboom", facade.boom
@@ -240,13 +220,41 @@ class RescueFromTest < BrieflyTest
     assert_raises(ArgumentError) do
       Briefly.define do
         shortcut(:boom) { raise "kaboom" }
-        rescue_from(StandardError, :boom)
+        rescue_from(StandardError)
       end
     end
   end
 
-  def test_unknown_shortcut_name_raises
-    assert_raises(Briefly::UnknownShortcutError) { Briefly.define { rescue_from(StandardError, :nope) { :never } } }
+  # Covers AE4: any shortcut name on the verb is refused; the message points at the per-shortcut form.
+  def test_names_on_the_verb_are_refused
+    error = assert_raises(ArgumentError) do
+      Briefly.define do
+        shortcut(:boom) { raise "kaboom" }
+        rescue_from(StandardError, :boom) { :never }
+      end
+    end
+
+    assert_match(/takes no shortcut names/, error.message)
+    assert_match(/shortcut\(name\)\.rescue_from/, error.message)
+  end
+
+  def test_several_names_on_the_verb_are_also_refused
+    assert_raises(ArgumentError) do
+      Briefly.define do
+        shortcut(:a) { :a }
+        shortcut(:b) { :b }
+        rescue_from(StandardError, :a, :b) { :never }
+      end
+    end
+  end
+
+  def test_an_array_of_names_is_also_refused
+    assert_raises(ArgumentError) do
+      Briefly.define do
+        shortcut(:boom) { raise "kaboom" }
+        rescue_from(StandardError, [:boom]) { :never }
+      end
+    end
   end
 
   def test_global_rescue_from_validates_its_arguments
@@ -278,7 +286,7 @@ class RescueFromTest < BrieflyTest
 
   def test_an_unguarded_registry_really_does_lose_concurrent_registrations
     registry = UnguardedRegistry.new
-    threads = 4.times.map { Thread.new { 50.times { registry.add(StandardError, nil, proc { :x }) } } }
+    threads = 4.times.map { Thread.new { 50.times { registry.add(StandardError, proc { :x }) } } }
     threads.each(&:join)
 
     assert_operator registry.wide.size, :<, 200,
@@ -292,7 +300,7 @@ class RescueFromTest < BrieflyTest
     registry = Briefly::ErrorRegistry.new
     mutex = registry.instance_variable_get(:@mutex)
     mutex.lock
-    writer = Thread.new { registry.add(StandardError, nil, proc { :x }) }
+    writer = Thread.new { registry.add(StandardError, proc { :x }) }
     Thread.pass until writer.status == "sleep" || !writer.alive?
     blocked = writer.alive?
     mutex.unlock

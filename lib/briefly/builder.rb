@@ -11,7 +11,7 @@ module Briefly
 
     # @api private
     # @param facade [Briefly::Facade]
-    # @param defs [Hash{Symbol => Briefly::Definition}] copies of the facade's current definitions
+    # @param defs [Hash{Symbol => Briefly::Shortcut}] copies of the facade's current shortcuts
     # @param children [Hash{Symbol => Briefly::Facade}] the facade's namespaces, by name
     def initialize(facade, defs, children)
       @facade = facade
@@ -38,7 +38,7 @@ module Briefly
     end
 
     # Declares a namespace: a shortcut returning a child facade, so +App.db.query+ works. The block is
-    # the child's own DSL — +shortcut+, +memoize+, +use+, +rescue_from+, and further namespaces.
+    # the child's own DSL — +shortcut+ (and the shortcut it returns), +use+, +rescue_from+, and namespaces.
     #
     # The child is created once and reused by later passes, so its memos survive +configure+.
     # {Briefly::Facade::Control#clear_memos!} cascades into it. Two limits, both deliberate: a child body cannot
@@ -70,57 +70,58 @@ module Briefly
       name
     end
 
-    # Declares a shortcut. Redeclaring a name (canonical or alias) silently overrides it.
+    # Declares a shortcut, or fetches an already-declared one to refine.
+    #
+    # With a block, declares the shortcut (redeclaring a name, canonical or alias, silently overrides it)
+    # and returns the {Briefly::Shortcut}, so you can chain +.memoize+ or +.rescue_from+ onto it. With no
+    # block, +shortcut(name)+ fetches the shortcut +name+ resolves to (canonical or alias) so a pack's
+    # shortcut can be refined; it never declares, purges, or overrides.
     #
     # @param canonical [Symbol] the primary method name; may end in +?+ or +!+
-    # @param aliases [Array<Symbol>] extra names sharing the body and the memo cell
+    # @param aliases [Array<Symbol>] extra names sharing the body and the memo cell (declare only)
     # @yield the implementation, bound to the facade at call time
-    # @return [Symbol] the canonical name
+    # @return [Briefly::Shortcut] the declared or fetched shortcut, ready to refine
+    # @raise [ArgumentError] if a bodiless call is given aliases — a fetch ignores them, so a
+    #   non-empty list means the block was forgotten
     # @raise [Briefly::ReservedNameError] if any name shadows a facade method
+    # @raise [Briefly::UnknownShortcutError] if a bodiless +name+ resolves to nothing
     def shortcut(canonical, *aliases, &body)
-      raise ArgumentError, "shortcut(#{canonical.inspect}) requires a block" unless body
+      unless body
+        # A bodiless `shortcut(name)` fetches an existing shortcut to refine; aliases are meaningless
+        # there, so a non-empty list means a block was forgotten — fail loudly, don't drop them silently.
+        raise ArgumentError, "shortcut(#{canonical.inspect}, ...) with aliases requires a block" unless aliases.empty?
 
-      # A `&:upcase`-style Proc carries no location of its own; fall back to this call site so the compiled
-      # method points at the user's declaration, never a fabricated file. `namespace` overwrites it anyway.
-      location = body.source_location || caller_locations(1, 1).first.then { |l| [l.path, l.lineno] }
-      defn = Definition.new(canonical, aliases, body, location)
+        return fetch(canonical)
+      end
+
+      defn = Shortcut.new(canonical, aliases, body, source_location_for(body))
       defn.names.each { |name| validate_name!(name) }
       purge(defn.names, except: canonical)
       @defs[canonical] = defn
-      canonical
     end
 
-    # Marks an already-declared shortcut as memoized: computed once, cached for the process lifetime.
-    #
-    # @param name [Symbol] a canonical name or an alias
-    # @param opts [Hash] reserved for future use; none are accepted
-    # @return [Symbol] the canonical name
-    # @raise [Briefly::UnknownShortcutError] if +name+ does not resolve
-    def memoize(name, **opts)
-      raise ArgumentError, "memoize(#{name.inspect}) got unknown options: #{opts.keys.join(", ")}" unless opts.empty?
-
-      defn = fetch(name)
-      defn.memoize!
-      defn.canonical
-    end
-
-    # Registers an error handler. The handler's return value becomes the shortcut's return value.
+    # Registers a facade-wide error handler: one applying to every shortcut, consulted after each
+    # shortcut's own handlers. The handler's return value becomes the shortcut's return value. To guard a
+    # single shortcut, chain onto it instead — +shortcut(name).rescue_from(error_class) { ... }+ — which
+    # is why this verb takes no shortcut names.
     #
     # Because +{}+ binds to the nearest token, +rescue_from StandardError { }+ is a call to a method
-    # named +StandardError+. Use +rescue_from Err, :name do |e| ... end+ or +rescue_from(Err, :name) { |e| ... }+.
+    # named +StandardError+. Use +rescue_from Err do |e| ... end+ or +rescue_from(Err) { |e| ... }+.
     #
     # @param error_class [Class] matched against the raised error and its subclasses
-    # @param names [Array<Symbol>] shortcuts to scope to; none means facade-wide
+    # @param names [Array<Symbol>] must be empty; any name is refused because the shortcut expresses it
     # @yield [error, shortcut_name] the recovery block
     # @return [self]
-    def rescue_from(error_class, *names, &handler)
-      unless error_class.is_a?(Class)
-        raise ArgumentError, "rescue_from expects the error class first, e.g. rescue_from(StandardError, :name) { }"
+    # @raise [ArgumentError] if any shortcut names are given
+    def rescue_from(error_class, *names, &block)
+      Briefly.send(:validate_rescue!, error_class, block)
+      unless names.flatten.empty?
+        raise ArgumentError, "rescue_from(#{error_class}) takes no shortcut names — scope one to its " \
+                             "shortcut with shortcut(name).rescue_from(#{error_class}) { ... }, or omit " \
+                             "names for a facade-wide handler"
       end
-      raise ArgumentError, "rescue_from(#{error_class}) requires a block" unless handler
 
-      scoped = names.flatten.map { |name| fetch(name).canonical }
-      @errors << [error_class, (scoped.empty? ? nil : scoped), handler]
+      @errors << [error_class, block]
       self
     end
 
@@ -143,6 +144,16 @@ module Briefly
 
     private
 
+    # A `&:upcase`-style Proc carries no location of its own; fall back to the caller's declaration site
+    # so the compiled method points at the user's code, never a fabricated file. `namespace` overwrites it
+    # anyway. Depth 2 skips this helper and `shortcut` to land on the DSL block — or a pack's `install`.
+    #
+    # @param body [Proc]
+    # @return [Array(String, Integer)]
+    def source_location_for(body)
+      body.source_location || caller_locations(2, 1).first.then { |l| [l.path, l.lineno] }
+    end
+
     def validate_name!(name)
       raise ArgumentError, "shortcut names must be Symbols, got #{name.inspect}" unless name.is_a?(Symbol)
       raise ReservedNameError, "#{name} is reserved by Briefly::Facade" if Facade::RESERVED.include?(name)
@@ -152,7 +163,7 @@ module Briefly
       raise ReservedNameError, "#{name} is reserved: #{Candor::BODY_PREFIX}* names hold compiled shortcut bodies"
     end
 
-    # Frees the incoming names from any definition that currently owns them, so a redeclaration
+    # Frees the incoming names from any shortcut that currently owns them, so a redeclaration
     # never leaves a stale alias pointing at the old body.
     def purge(names, except:)
       @defs.delete_if { |canonical, _| canonical != except && names.include?(canonical) }

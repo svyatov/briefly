@@ -67,12 +67,22 @@ overrides it silently; that is how you override a pack's shortcut.
 
 ## `memoize`
 
-Annotate an already-declared shortcut by name, on its own line:
+`shortcut` returns the shortcut you refine. Chain `.memoize` onto it to cache the value — computed once,
+then reused for the process lifetime:
 
 ```ruby
 Briefly.define do
-  shortcut(:catalog) { Catalog.load_from_disk }
-  memoize :catalog
+  shortcut(:catalog) { Catalog.load_from_disk }.memoize
+end
+```
+
+To memoize a shortcut you didn't declare here — one a pack installed, say — call `shortcut(name)`
+with no block to fetch it, then chain onto that. A bodiless `shortcut` never re-declares:
+
+```ruby
+Briefly.define do
+  use "rails"
+  shortcut(:cache).memoize
 end
 ```
 
@@ -88,10 +98,8 @@ rescue-backed shortcut succeeds, so its own value (containing the fallback) is c
 process lifetime, even after the inner shortcut recovers:
 
 ```ruby
-shortcut(:flaky) { external_call }        # rescue_from(..., :flaky) { "unknown" }
-memoize :flaky
-shortcut(:summary) { "build #{flaky}" }   # caches "build unknown" forever
-memoize :summary                          # <- don't memoize over a rescue-backed shortcut
+shortcut(:flaky) { external_call }.rescue_from(SomeError) { "unknown" }.memoize
+shortcut(:summary) { "build #{flaky}" }.memoize   # <- caches "build unknown" forever
 ```
 
 Clearing is a neutral primitive. Management lives behind one accessor, `App.briefly`, so names like
@@ -110,17 +118,23 @@ like any non-yielding method, drops the block.
 
 ## `rescue_from`
 
-Error class first, shortcut names optional and trailing. The handler's return value becomes the
-shortcut's return value:
+The handler's return value becomes the shortcut's return value. To guard one shortcut, chain
+`.rescue_from(error_class) { |e, name| ... }` onto it. The top-level `rescue_from` verb is for what a
+single shortcut can't voice: a facade-wide handler, consulted after each shortcut's own. Error class
+first, always:
 
 ```ruby
 Briefly.define do
   use "rails"
-  shortcut(:redis) { REDIS_POOL }
-  rescue_from(Redis::BaseError, :redis) { |e| Sentry.capture_exception(e); nil }
-  rescue_from(StandardError) { |e, name| Rails.logger.warn("#{name}: #{e.message}"); raise }
+  shortcut(:redis) { REDIS_POOL }.rescue_from(Redis::BaseError) { |e| Sentry.capture_exception(e); nil }
+  rescue_from(StandardError) { |e, name| Rails.logger.warn("#{name}: #{e.message}"); raise }  # facade-wide
 end
 ```
+
+The top-level `rescue_from` takes no shortcut names — pass any and it raises `ArgumentError`, pointing
+you at `shortcut(name).rescue_from(...)`. Scoping a handler to a shortcut lives in one channel, the
+shortcut itself, so its name is never written twice to annotate it. To share one handler across a few
+shortcuts, chain `.rescue_from` onto each; to cover them all, register it facade-wide.
 
 Unlike a shortcut body, a handler is not bound to the facade. It is called as
 `handler.call(error, name)`, so `self` stays whatever it was where you wrote the block. Reach for
@@ -146,13 +160,16 @@ constants (`Rails.logger`, `Sentry`) rather than bare shortcut names inside a ha
 > body calling another with a bad argument list is a different matter: that raises *inside* the
 > calling body, where the calling shortcut's own handler sees it like any other error.
 
-> **⚠️ `{}` needs parentheses.** `rescue_from StandardError { ... }` binds the block to
-> `StandardError`, not to `rescue_from`, and raises `NoMethodError`. Use either form:
+> **⚠️ `{}` needs parentheses (standalone `rescue_from` only).** `rescue_from StandardError { ... }`
+> binds the block to `StandardError`, not to `rescue_from`, and raises `NoMethodError`. Use either form:
 >
 > ```ruby
-> rescue_from StandardError, :redis do |e| ... end   # do/end, no parens
-> rescue_from(StandardError, :redis) { |e| ... }     # braces REQUIRE parens
+> rescue_from StandardError do |e| ... end   # do/end, no parens
+> rescue_from(StandardError) { |e| ... }     # braces REQUIRE parens
 > ```
+>
+> Scoping to the shortcut sidesteps this: `shortcut(:redis) { ... }.rescue_from(Redis::BaseError) { |e| ... }`
+> already has a receiver and parens, so `{ }` binds where you mean it.
 
 Handlers are plain procs, so `{ |e| }` and `{ |e, name| }` both work. Re-raising propagates. If no
 handler matches, the original error propagates unchanged, never silently swallowed. Only
@@ -167,8 +184,8 @@ For a raised error, the first `is_a?` match wins, searching in this order:
 
 | # | Level | Within the level |
 |---|-------|------------------|
-| 1 | Facade handlers scoped to this shortcut | last registered first |
-| 2 | Facade handlers with no names | last registered first |
+| 1 | This shortcut's own handlers | last registered first |
+| 2 | Facade-wide handlers | last registered first |
 | 3 | Global handlers (`Briefly.rescue_from`) | last registered first |
 
 No match → the error propagates.
@@ -182,8 +199,7 @@ App = Briefly.define do
   shortcut(:redis) { REDIS_POOL }
 
   namespace :db do
-    shortcut(:pool) { ActiveRecord::Base.connection_pool }
-    memoize :pool
+    shortcut(:pool) { ActiveRecord::Base.connection_pool }.memoize
   end
 end
 
@@ -194,7 +210,7 @@ App.db.pool   # => the pool
 
 A namespace is a child `Briefly::Facade`, reached by a real method like any other shortcut, so
 `App.db` is a value you can pass around, and `App.db.pool` is not a `method_missing` trick. It takes
-the whole DSL: `shortcut`, `memoize`, `rescue_from`, `use`, and further namespaces.
+the whole DSL: `shortcut` (and the shortcut it returns), `rescue_from`, `use`, and further namespaces.
 
 `clear_memos!` cascades, so one `Briefly::Rails::Reload` on the root clears the whole tree. The child
 is created once and reused, so its memos survive a later `configure`.
@@ -220,8 +236,8 @@ module RedisPack
 
   def install(builder)
     builder.shortcut(:redis) { ConnectionPool.new { Redis.new } }
-    builder.memoize(:redis)
-    builder.rescue_from(Redis::CannotConnectError, :redis) { nil }
+           .memoize
+           .rescue_from(Redis::CannotConnectError) { nil }
   end
 end
 
@@ -290,8 +306,7 @@ Plus `db`, a namespace holding `Briefly::Rails::DB`.
 reporter, so `App.error.report(e)` and `App.error.handle { }` reach it off one live lookup.
 `config_for` reads a per-environment YAML config on every call and forwards any extra keyword (such
 as `env:`) to `Rails.application.config_for`: it takes an argument, so it never memoizes; compose one
-that does by declaring a shortcut, then memoizing it: `shortcut(:payments) { config_for(:payments) }`
-then `memoize(:payments)`.
+that does by chaining `.memoize` onto a shortcut: `shortcut(:payments) { config_for(:payments) }.memoize`.
 
 Requires Rails >= 7.2. There is no `secrets` shortcut: `Rails.application.secrets` was removed in
 7.2. Use `credentials`.
@@ -416,8 +431,7 @@ memoizes objects holding on to reloadable application classes:
 ```ruby
 Admin = Briefly.define do
   use "rails/reload"
-  shortcut(:policy) { Admin::Policy.new }
-  memoize :policy
+  shortcut(:policy) { Admin::Policy.new }.memoize
 end
 ```
 
@@ -484,8 +498,7 @@ end
 # after
 App = Briefly.define do
   use "rails"
-  shortcut(:redis) { REDIS_POOL }
-  memoize :redis
+  shortcut(:redis) { REDIS_POOL }.memoize
 end
 ```
 

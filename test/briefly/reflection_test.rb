@@ -95,8 +95,7 @@ class ReflectionTest < BrieflyTest
   def test_a_memoized_shortcut_keeps_arity_zero_and_gains_an_honest_location
     line = __LINE__ + 2
     facade = Briefly.define do
-      shortcut(:catalog) { :built }
-      memoize :catalog
+      shortcut(:catalog) { :built }.memoize
     end
 
     assert_equal 0, facade.method(:catalog).arity

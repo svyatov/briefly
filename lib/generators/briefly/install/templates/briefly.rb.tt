@@ -6,13 +6,13 @@
 <%= name %> = Briefly.define do
   use "rails"
 
-  # Your own shortcuts go here (a body can call the other shortcuts). memoize is a separate line that
-  # annotates an already-declared shortcut — it takes no block:
+  # Your own shortcuts go here (a body can call the other shortcuts). `shortcut` returns the shortcut
+  # you refine: chain `.memoize` to compute once, or `.rescue_from(Error) { fallback }` to recover — in
+  # any order. `rescue_from` on its own line stays for facade-wide handlers.
   # shortcut(:redis)    { REDIS_POOL }
   # shortcut(:stripe)   { Stripe::Client.new(x.stripe_key) }
-  # shortcut(:payments) { config_for(:payments) }
-  # memoize(:payments)                                       # compute once (cleared on reload)
-  # rescue_from(Redis::CannotConnectError) { NullCache.new }
+  # shortcut(:payments) { config_for(:payments) }.memoize    # compute once (cleared on reload)
+  # shortcut(:cache)    { Redis.new }.rescue_from(Redis::CannotConnectError) { NullCache.new }
 end
 
 # --- What `use "rails"` gives you (call as `<%= name %>.<shortcut>`), by concern ---

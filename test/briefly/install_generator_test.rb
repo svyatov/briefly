@@ -26,6 +26,17 @@ class InstallGeneratorTest < BrieflyTest
     refute_includes render(name: "Facade"), "App.", "template hardcodes `App.` instead of the chosen name"
   end
 
+  # The scaffold teaches the chained form: `.memoize` and `.rescue_from` chain off `shortcut`, and no
+  # retired verb (bare `memoize(` or a name-scoped `rescue_from(Err, :name)`) survives in the examples.
+  def test_the_scaffold_examples_use_the_chained_form
+    rendered = render
+
+    assert_includes rendered, ".memoize"
+    assert_match(/shortcut\(:cache\)\s+\{ Redis\.new \}\.rescue_from\(/, rendered)
+    refute_match(/(?<!\.)\bmemoize\(/, rendered, "a bare `memoize(` verb survived in the scaffold")
+    refute_match(/rescue_from\([A-Za-z:]+,\s*:\w+\)/, rendered, "a single-name `rescue_from` survived")
+  end
+
   # Nothing runs the generator (no railties), so pin the literals a typo would silently break: the
   # template it renders, the destination it writes, and its base class (the `::Rails` discipline).
   def test_the_generator_wires_its_template_and_destination

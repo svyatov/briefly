@@ -44,13 +44,15 @@ bundle exec rake release
 
 Four core files, each with one job:
 
-- `lib/briefly/definition.rb` — one shortcut declaration: canonical name, aliases, body, source
-  location, memoized flag
-- `lib/briefly/builder.rb` — receives the DSL (`shortcut`, `memoize`, `rescue_from`, `use`,
-  `namespace`), collects definitions, validates them in `compile!`
-- `lib/briefly/facade.rb` — hands definitions to `Candor.define`; owns the memo store, the namespace
-  children and error dispatch
-- `lib/briefly/error_registry.rb` — `rescue_from` handlers, one instance per facade plus one global
+- `lib/briefly/shortcut.rb` — one shortcut: canonical name, aliases, body, source location, memoized
+  flag, and its own scoped error handlers. It is the object `shortcut` returns, refined in place by
+  `.memoize` and `.rescue_from`; it holds no `Builder` reference
+- `lib/briefly/builder.rb` — receives the DSL (`shortcut`, `rescue_from`, `use`, `namespace`),
+  collects shortcuts, validates them in `compile!`
+- `lib/briefly/facade.rb` — hands shortcuts to `Candor.define`; owns the memo store, the namespace
+  children and error dispatch (a shortcut's own handlers first, then facade-wide, then global)
+- `lib/briefly/error_registry.rb` — the facade-wide and global `rescue_from` handlers (one registry
+  per facade plus one global); a shortcut's own handlers live on the `Shortcut`, not here
 
 Every shortcut becomes a real method through `Candor.define(singleton_class, name, aliases:, via:
 :__call, parameters:, source_location:, body:)`. Candor installs the body privately under
@@ -66,7 +68,7 @@ source of truth, there is no inflection.
 
 A **namespace** is a child `Facade` reached by a real method, so `App.db.query` needs no
 `method_missing`. Children thread through `Builder.new(facade, defs, children)` and out of
-`compile!`, the same seam the definitions use.
+`compile!`, the same seam the shortcuts use.
 
 Signatures live in `sig/`. Shortcuts are compiled at runtime, so RBS cannot see them; `sig/` types
 the static surface only. There is no Steep target and no `rbs test` — CONTRIBUTING.md's **Types**
@@ -124,7 +126,7 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   callee raises at a call site lexically inside the caller's body, hence inside the *caller's* `__call`
   rescue, so the caller's handler swallows it. Pinned by
   `test_a_wrong_arity_call_between_shortcuts_is_seen_by_the_callers_handler`.
-- **`__call` looks the definition up outside its own `rescue`.** An internal `KeyError` must never be
+- **`__call` looks the shortcut up outside its own `rescue`.** An internal `KeyError` must never be
   laundered into a user's fallback.
 - **`ErrorRegistry#add` rebinds `@entries` under the mutex.** `[*@entries, entry]` is a read, a build
   and an assign; two threads that read the same array each write their own successor, and the loser's
@@ -133,9 +135,10 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   `synchronize` deleted, 4,000 concurrent registrations lost nothing in 20 runs, because MRI rarely
   preempts inside so short a window. `test_add_holds_the_mutex_while_rebinding_entries` asserts the
   exclusion directly instead of racing for it.
-- **`Builder` deep-copies the facade's definitions.** A `configure` pass that raises must leave the
-  live facade exactly as it was — `Hash#dup` alone shares the `aliases` arrays. The namespace children
-  hash is copied for the same reason: a pass that raises must not leave a new child reachable.
+- **`Builder` deep-copies the facade's shortcuts.** A `configure` pass that raises must leave the
+  live facade exactly as it was — `Hash#dup` alone shares each `Shortcut`'s `aliases` and `rescues`
+  arrays. The namespace children hash is copied for the same reason: a pass that raises must not leave
+  a new child reachable.
 - **`namespace` collects its child's pass, it does not run it.** `compile!` recurses to validate the
   whole tree; only then does `__commit` install any of it, children first. Calling `child.configure`
   inline instead commits eagerly, so a raise later in the parent's pass — or in a *sibling* namespace —

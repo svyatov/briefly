@@ -156,18 +156,20 @@ class ShortcutTest < BrieflyTest
     assert_equal :memoize, facade.memoize
   end
 
-  def test_shortcut_requires_a_block
-    assert_raises(ArgumentError) { Briefly.define { shortcut(:x) } }
+  # A bodiless `shortcut(name)` no longer errors: it fetches the named shortcut to refine. An unknown
+  # name resolves to nothing and raises. See `shortcut_refinement_test.rb` for the fetch behavior.
+  def test_bodiless_shortcut_of_an_unknown_name_raises
+    assert_raises(Briefly::UnknownShortcutError) { Briefly.define { shortcut(:x) } }
   end
 
   def test_shortcut_names_must_be_symbols
     assert_raises(ArgumentError) { Briefly.define { shortcut("x") { 1 } } }
   end
 
-  def test_shortcut_returns_the_canonical_name
-    name = nil
-    Briefly.define { name = shortcut(:x, :y) { 1 } }
+  def test_shortcut_returns_the_shortcut
+    sc = nil
+    Briefly.define { sc = shortcut(:x, :y) { 1 } }
 
-    assert_equal :x, name
+    assert_instance_of Briefly::Shortcut, sc
   end
 end

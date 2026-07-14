@@ -62,8 +62,7 @@ class CoreTest < BrieflyTest
   def test_configure_preserves_existing_definitions_and_memoization
     calls = 0
     facade = Briefly.define do
-      shortcut(:cached) { calls += 1 }
-      memoize :cached
+      shortcut(:cached) { calls += 1 }.memoize
     end
     facade.briefly.configure { shortcut(:other) { :other } }
 
@@ -77,7 +76,7 @@ class CoreTest < BrieflyTest
   def test_configure_can_memoize_a_previously_declared_shortcut
     calls = 0
     facade = Briefly.define { shortcut(:cached) { calls += 1 } }
-    facade.briefly.configure { memoize :cached }
+    facade.briefly.configure { shortcut(:cached).memoize }
 
     facade.cached
     facade.cached
@@ -87,8 +86,7 @@ class CoreTest < BrieflyTest
 
   def test_configure_preserves_previously_registered_handlers
     facade = Briefly.define do
-      shortcut(:boom) { raise "kaboom" }
-      rescue_from(RuntimeError, :boom) { :rescued }
+      shortcut(:boom) { raise "kaboom" }.rescue_from(RuntimeError) { :rescued }
     end
     facade.briefly.configure { shortcut(:other) { :other } }
 
@@ -102,9 +100,8 @@ class CoreTest < BrieflyTest
 
     assert_raises(Briefly::Error) do
       facade.briefly.configure do
-        memoize :value
-        shortcut(:bad) { |arg| arg }
-        memoize :bad
+        shortcut(:value).memoize
+        shortcut(:bad) { |arg| arg }.memoize
       end
     end
 
@@ -120,8 +117,7 @@ class CoreTest < BrieflyTest
     assert_raises(Briefly::Error) do
       facade.briefly.configure do
         shortcut(:other, :c) { :stolen }
-        shortcut(:bad) { |arg| arg }
-        memoize :bad
+        shortcut(:bad) { |arg| arg }.memoize
       end
     end
     facade.briefly.configure { shortcut(:unrelated) { :u } }
@@ -130,10 +126,25 @@ class CoreTest < BrieflyTest
     assert_equal :value, facade.c
   end
 
+  # Sibling to the alias guard above, for a shortcut's own error handlers: a raising pass that scoped a
+  # `rescue_from` onto an existing shortcut must not leak it onto the live shortcut. Pins the
+  # `@rescues = other.rescues.dup` half of Shortcut#initialize_copy — delete that dup and this test fails.
+  def test_a_raising_configure_does_not_leak_a_scoped_handler
+    facade = Briefly.define { shortcut(:boom) { raise "kaboom" } }
+
+    assert_raises(Briefly::Error) do
+      facade.briefly.configure do
+        shortcut(:boom).rescue_from(RuntimeError) { :leaked }
+        shortcut(:bad) { |arg| arg }.memoize
+      end
+    end
+
+    assert_raises(RuntimeError) { facade.boom }
+  end
+
   def test_inspect_lists_shortcut_names_and_hides_memo_internals
     facade = Briefly.define do
-      shortcut(:secret) { "s3cr3t" }
-      memoize :secret
+      shortcut(:secret) { "s3cr3t" }.memoize
     end
     facade.secret
 
