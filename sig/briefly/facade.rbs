@@ -9,7 +9,7 @@ module Briefly
     @__aliases: Hash[Symbol, Symbol]
     @__memos: Hash[Symbol, untyped]
     @__monitor: Monitor
-    @__rescues: RescueRegistry
+    @__rescues: Rescues
     @__installed: Array[Symbol]
     @__children: Hash[Symbol, Facade]
 

@@ -14,7 +14,7 @@ module Briefly
       @__aliases = {}
       @__memos = {}.freeze
       @__monitor = Monitor.new
-      @__rescues = RescueRegistry.new
+      @__rescues = Rescues.new
       @__installed = [].freeze
       @__children = {}
     end

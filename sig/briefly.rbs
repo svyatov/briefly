@@ -24,7 +24,7 @@ module Briefly
   # A recovery block. Its return value becomes the shortcut's return value.
   type handler = ^(StandardError error, Symbol shortcut_name) -> untyped
 
-  # A facade-wide rescue handler, before `RescueRegistry` receives it.
+  # A facade-wide rescue handler, before `Rescues` receives it.
   type rescue_entry = [ Class, handler ]
 
   # A pack is any object responding to `#install(builder)`. Options are optional: Ruby drops an empty
@@ -39,7 +39,7 @@ module Briefly
   # A registry entry: a pack, or a constant path resolved on first use.
   type pack_entry = _Pack | String
 
-  self.@rescues: RescueRegistry
+  self.@rescues: Rescues
   self.@packs: Hash[String, pack_entry]
 
   # Shortcuts are compiled at runtime, so RBS cannot see them. Declare the ones you rely on in
@@ -48,7 +48,7 @@ module Briefly
   def self.register: (String | Symbol name, pack_entry pack) -> Module
   def self.pack: (String | Symbol name) -> _Pack
   def self.rescue_from: (Class error_class) { (StandardError, Symbol) -> untyped } -> Module
-  def self.rescues: () -> RescueRegistry
+  def self.rescues: () -> Rescues
 
   private def self.validate_rescue!: (untyped error_class, Proc? handler) -> void
 end

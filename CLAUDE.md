@@ -51,7 +51,7 @@ Four core files, each with one job:
   collects shortcuts, validates them in `compile!`
 - `lib/briefly/facade.rb` — hands shortcuts to `Candor.define`; owns the memo store, the namespace
   children and error dispatch (a shortcut's own handlers first, then facade-wide, then global)
-- `lib/briefly/rescue_registry.rb` — the facade-wide and global `rescue_from` handlers (one registry
+- `lib/briefly/rescues.rb` — the facade-wide and global `rescue_from` handlers (one registry
   per facade plus one global); a shortcut's own handlers live on the `Shortcut`, not here
 
 Every shortcut becomes a real method through `Candor.define(singleton_class, name, aliases:, via:
@@ -128,7 +128,7 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   `test_a_wrong_arity_call_between_shortcuts_is_seen_by_the_callers_handler`.
 - **`__call` looks the shortcut up outside its own `rescue`.** An internal `KeyError` must never be
   laundered into a user's fallback.
-- **`RescueRegistry#add` rebinds `@entries` under the mutex.** `[*@entries, entry]` is a read, a build
+- **`Rescues#add` rebinds `@entries` under the mutex.** `[*@entries, entry]` is a read, a build
   and an assign; two threads that read the same array each write their own successor, and the loser's
   handlers vanish — not one entry, but everything it appended since its snapshot. Reads stay lock-free
   against the frozen array; only writers serialize. Scale alone does not pin this: with the

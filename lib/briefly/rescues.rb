@@ -8,7 +8,7 @@ module Briefly
   # Entries are stored oldest-first and matched newest-first, so the most recent registration for a
   # given error class wins. Reads are lock-free against a frozen array; writes rebind it under a
   # mutex, because rebinding alone would drop concurrent registrations.
-  class RescueRegistry
+  class Rescues
     # A single registration.
     Entry = Struct.new(:klass, :handler)
 

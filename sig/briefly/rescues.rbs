@@ -1,6 +1,6 @@
 module Briefly
   # An ordered list of facade-wide and global `rescue_from` registrations, queried at dispatch time.
-  class RescueRegistry
+  class Rescues
     # A single registration.
     class Entry < ::Struct[untyped]
       attr_accessor klass: Class

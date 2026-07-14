@@ -53,7 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   shortcut names; passing any raises `ArgumentError` pointing at `shortcut(name).rescue_from(...)`.
   Scope a handler to a shortcut by chaining `.rescue_from` onto it. Global `Briefly.rescue_from` is
   unchanged.
-- **BREAKING:** the rescue-handler registry is now `Briefly::RescueRegistry` (was
+- **BREAKING:** the rescue-handler registry is now `Briefly::Rescues` (was
   `Briefly::ErrorRegistry`), reached through `Briefly.rescues` (was `Briefly.errors`) — it holds
   `rescue_from` handlers, not errors. `Briefly.rescues.clear` still resets globally registered
   handlers; the internal `#wide` enumerator is gone, replaced by `#size` for counting registrations.

@@ -6,10 +6,10 @@ require "support/variadic_fixture"
 class RescueFromTest < BrieflyTest
   class NotStandard < Exception; end # rubocop:disable Lint/InheritException
 
-  # RescueRegistry#add without its mutex. Scale alone does not surface the lost update reliably --
+  # Rescues#add without its mutex. Scale alone does not surface the lost update reliably --
   # 8x500 against the unguarded registry loses nothing in 20 runs -- so the read/write window is held
   # open explicitly. Without this fixture the guard below cannot fail, and pins nothing.
-  class UnguardedRegistry < Briefly::RescueRegistry
+  class UnguardedRegistry < Briefly::Rescues
     def add(klass, handler)
       snapshot = @entries
       Thread.pass
@@ -137,9 +137,9 @@ class RescueFromTest < BrieflyTest
     assert_equal :second, facade.boom
   end
 
-  # The level above lives on the Shortcut; this one lives in the RescueRegistry. Two facade-wide
+  # The level above lives on the Shortcut; this one lives in Rescues. Two facade-wide
   # handlers for one class both land in the same registry, and `handler_for` matches newest-first.
-  # Flip `reverse_each` to `each` in rescue_registry.rb and this goes red — the count-only concurrency
+  # Flip `reverse_each` to `each` in rescues.rb and this goes red — the count-only concurrency
   # tests never would.
   def test_last_registered_facade_wide_handler_wins
     facade = Briefly.define do
@@ -309,9 +309,9 @@ class RescueFromTest < BrieflyTest
 
   # The test above proves a lost update is detectable; it cannot prove #add still guards against one,
   # because the race almost never fires at a scale a suite can afford. Pin the mutex directly: hold it,
-  # and #add must block. Delete the synchronize in rescue_registry.rb and this goes red.
+  # and #add must block. Delete the synchronize in rescues.rb and this goes red.
   def test_add_holds_the_mutex_while_rebinding_entries
-    registry = Briefly::RescueRegistry.new
+    registry = Briefly::Rescues.new
     mutex = registry.instance_variable_get(:@mutex)
     mutex.lock
     writer = Thread.new { registry.add(StandardError, proc { :x }) }

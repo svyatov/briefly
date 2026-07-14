@@ -5,7 +5,7 @@ require "candor"
 require "briefly/version"
 require "briefly/errors"
 require "briefly/shortcut"
-require "briefly/rescue_registry"
+require "briefly/rescues"
 require "briefly/facade"
 require "briefly/builder"
 
@@ -18,7 +18,7 @@ require "briefly/builder"
 module Briefly
   autoload :Rails, "briefly/rails"
 
-  @rescues = RescueRegistry.new
+  @rescues = Rescues.new
 
   # The packs this gem ships, under the short names +use+ accepts. Values are constant paths, never
   # constants: naming +Briefly::Rails::DB+ here would resolve it at load and defeat the autoload above.
@@ -105,7 +105,7 @@ module Briefly
     end
     private :validate_rescue!
 
-    # @return [Briefly::RescueRegistry] the global registry
+    # @return [Briefly::Rescues] the global registry
     attr_reader :rescues
   end
 end
