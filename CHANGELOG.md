@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - The README declares the public API that Semantic Versioning covers, and what falls outside it, so
   a MINOR bump before `1.0.0` now has a stated scope rather than an implied one.
+- CONTRIBUTING.md states the deprecation policy: a public item ships deprecated in one release, with
+  a runtime warning naming its replacement and the earliest removal version, before a later release
+  removes it. v0.2.0's three removals predate the policy and are named there.
 
 ## v0.2.0 (2026-07-14)
 

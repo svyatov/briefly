@@ -1,0 +1,61 @@
+name: Feature proposal
+description: A shortcut, a DSL verb or a pack that briefly does not have yet
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The core knows nothing about any framework, and that is deliberate: it stays a compiler for
+        shortcuts, and everything framework-shaped lives in a pack. Where a proposal lands on that
+        line decides most of what happens to it, so the last question is the important one.
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: What you want to be able to write
+      description: The declaration and the call, as you would want them to read.
+      render: ruby
+      placeholder: |
+        App = Briefly.define do
+          shortcut(:thing) { ... }.something_new
+        end
+
+        App.thing
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: The workaround you are living with, and where it falls short.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: placement
+    attributes:
+      label: Core or pack
+      description: A pack is any object responding to `#install(builder, **opts)`, so most additions can be one without changing briefly at all.
+      options:
+        - A pack, which could live outside this repository
+        - A pack this gem should ship
+        - The core DSL, because a pack cannot express it
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: api-surface
+    attributes:
+      label: Which declared public API it touches
+      description: The README's Versioning section lists what Semantic Versioning covers here.
+      options:
+        - Briefly module methods (define, register, pack, rescue_from, rescues)
+        - The Builder DSL (shortcut, namespace, rescue_from, use)
+        - The refinements shortcut returns (memoize, rescue_from)
+        - The management surface behind App.briefly
+        - Names or aliases a shipped pack installs
+        - Nothing declared; this is additive only
+    validations:
+      required: true
