@@ -294,5 +294,14 @@ This project follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.
 1. Update `lib/briefly/version.rb`
 2. Update `CHANGELOG.md`: change `## Unreleased` to `## vX.Y.Z (YYYY-MM-DD)` and add a new empty
    `## Unreleased` section
-3. Commit: `chore: bump version to X.Y.Z`
-4. Release: `bundle exec rake release`
+3. Commit `chore: bump version to X.Y.Z`, and merge to `main` through a pull request
+4. Tag and push: `git tag -s vX.Y.Z -m "Version X.Y.Z" && git push origin vX.Y.Z`
+5. Approve the `release` environment when the workflow asks
+
+The tag push is the release. `.github/workflows/release.yml` checks the tag against
+`Briefly::VERSION`, runs the suite, builds the gem, and then waits on the `release` environment
+before anything reaches rubygems.org. It authenticates through RubyGems OIDC, so there is no API key
+anywhere, and `bundle exec rake release` no longer publishes: it prints these steps and exits.
+
+The tag must be signed (`-s`). `tag.gpgsign` is on globally, so `git tag -m` signs anyway, but a
+tag ruleset makes `refs/tags/v*` immutable once pushed, so a wrong tag cannot be repointed.
