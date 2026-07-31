@@ -7,8 +7,9 @@ concurrency:
 on:
   push:
     branches: ["main"]
+  # Deliberately unfiltered by base branch: a pull request stacked on another branch is still a
+  # change request, and a base filter of "main" silently runs nothing for it.
   pull_request:
-    branches: ["main"]
 
 permissions:
   contents: read
