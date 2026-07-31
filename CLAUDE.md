@@ -33,8 +33,13 @@ bundle exec rake rubocop
 bundle exec rake rbs
 bundle exec rake yard:stats        # fails unless 100% of the public API is documented
 
-# Test against another Rails version (Gemfile reads RAILS_VERSION; "edge" tracks rails/rails)
-rm -f Gemfile.lock && RAILS_VERSION=7.2 bundle install && RAILS_VERSION=7.2 bundle exec rake test
+# Test against another Rails version. gemfiles/ holds one file per Rails line, each setting
+# RAILS_VERSION and evaluating the root Gemfile; 7.2/8.0/8.1 commit a lockfile, edge does not.
+BUNDLE_GEMFILE=gemfiles/rails_7.2.gemfile bundle install
+BUNDLE_GEMFILE=gemfiles/rails_7.2.gemfile bundle exec rake test
+
+# Regenerate every lockfile after changing the root Gemfile, or CI's frozen install fails
+bundle lock && for v in 7.2 8.0 8.1; do BUNDLE_GEMFILE="gemfiles/rails_$v.gemfile" bundle lock; done
 
 # Release (update version.rb first); OTP is fetched from 1Password
 bundle exec rake release

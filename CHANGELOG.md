@@ -13,6 +13,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   a runtime warning naming its replacement and the earliest removal version, before a later release
   removes it. v0.2.0's three removals predate the policy and are named there.
 
+### Changed
+- Development now resolves through committed lockfiles. `gemfiles/` holds one file per Rails line,
+  each pinning that line and evaluating the root `Gemfile`, and 7.2, 8.0 and 8.1 commit a lockfile
+  beside theirs; CI installs from them frozen instead of deleting `Gemfile.lock` and re-resolving.
+  Contributors testing another Rails version now pass `BUNDLE_GEMFILE` rather than `RAILS_VERSION`.
+  Nothing an application installs changed.
+
 ## v0.2.0 (2026-07-14)
 
 ### Added

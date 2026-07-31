@@ -8,5 +8,7 @@
 /docs/
 /pkg/
 /tmp/
-Gemfile.lock
 CONCEPTS.md
+
+# gemfiles/rails_edge.gemfile tracks rails/rails HEAD, so it has nothing stable to lock.
+gemfiles/rails_edge.gemfile.lock

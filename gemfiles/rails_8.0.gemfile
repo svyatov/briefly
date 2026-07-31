@@ -1,0 +1,7 @@
+# frozen_string_literal: true
+
+# Pins the Rails line for one CI matrix leg. The root Gemfile reads RAILS_VERSION, so setting it
+# here and evaluating that file keeps the dependency list in one place.
+ENV["RAILS_VERSION"] = "8.0"
+
+eval_gemfile File.expand_path("../Gemfile", __dir__)
