@@ -19,6 +19,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   beside theirs; CI installs from them frozen instead of deleting `Gemfile.lock` and re-resolving.
   Contributors testing another Rails version now pass `BUNDLE_GEMFILE` rather than `RAILS_VERSION`.
   Nothing an application installs changed.
+- Releases are published by CI from a pushed tag, authenticating to RubyGems through OIDC, gated on
+  a manual approval, and signed with sigstore. No publishing credential exists on any machine.
+  `bundle exec rake release` no longer publishes; it prints the tag steps and exits.
 
 ## v0.2.0 (2026-07-14)
 

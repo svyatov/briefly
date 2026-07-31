@@ -107,6 +107,16 @@ The v0.2.0 release predates this policy and removed three things without one: `A
 top-level `memoize` verb, and name-scoped `rescue_from`. The changelog names the replacement for
 each, which is what a deprecation warning would have said, a release earlier.
 
+## Releases
+
+Nothing publishes from a laptop. A release is a signed tag pushed to `main`, which starts
+`.github/workflows/release.yml`: it checks the tag against `Briefly::VERSION`, runs the suite, builds
+the gem in a job holding no credential, and then waits for a person to approve the `release`
+environment before the publish job runs at all. That job authenticates to rubygems.org through OIDC,
+so no API key exists to leak, and it signs the exact bytes the build job produced.
+
+`bundle exec rake release` prints those steps and exits without publishing.
+
 ## Who decides
 
 Leonid Svyatov ([@svyatov](https://github.com/svyatov)) maintains `briefly`, reviews and merges every

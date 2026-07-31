@@ -31,12 +31,27 @@ namespace :yard do
   end
 end
 
-# `rake release` pushes to RubyGems, which requires an MFA OTP. Feed it a fresh code from
-# 1Password via GEM_HOST_OTP_CODE, which `gem push` reads.
-Rake::Task["release:rubygem_push"].enhance(["fetch_otp"])
+# Publishing happens in CI, triggered by a tag, and authenticates through RubyGems OIDC, so no
+# credential exists on any developer machine to push with. Bundler's own release tasks do push from
+# here, so they are replaced with the instruction rather than left reachable: a working local publish
+# is one distracted evening away from shipping an uncommitted working tree.
+%w[release release:rubygem_push release:source_control_push].each do |name|
+  Rake::Task[name].clear if Rake::Task.task_defined?(name)
+end
 
-task :fetch_otp do
-  ENV["GEM_HOST_OTP_CODE"] = `op item get "RubyGems" --account my --otp`.strip
+desc "Explain how a release actually happens"
+task :release do
+  abort <<~MESSAGE
+    Releases are cut by pushing a tag, not from here.
+
+      1. Set Briefly::VERSION in lib/briefly/version.rb
+      2. Move CHANGELOG.md's `## Unreleased` heading to `## vX.Y.Z (YYYY-MM-DD)` and open a new one
+      3. Commit, and merge to main through a pull request
+      4. git tag -s vX.Y.Z -m "Version X.Y.Z" && git push origin vX.Y.Z
+
+    The tag push starts .github/workflows/release.yml, which tests, builds, and then waits for you
+    to approve the `release` environment before anything reaches rubygems.org.
+  MESSAGE
 end
 
 task default: %i[rubocop rbs test]

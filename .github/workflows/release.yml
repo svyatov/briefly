@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  # No Bundler cache anywhere in this workflow, including here: a restored cache is a
+  # cache-poisoning vector in a tag-triggered publish, and a release is rare enough to pay for it.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "3.2"
+          bundler-cache: false
+
+      - run: bundle install
+      - run: bundle exec rake
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "4.0"
+          bundler-cache: false
+
+      - name: Check the tag against Briefly::VERSION
+        run: |
+          ruby -e '
+            require_relative "lib/briefly/version"
+            tag = ENV.fetch("GITHUB_REF_NAME").delete_prefix("v")
+            abort "tag #{tag} does not match Briefly::VERSION #{Briefly::VERSION}" unless tag == Briefly::VERSION
+            puts "tag #{tag} matches Briefly::VERSION"
+          '
+
+      - run: mkdir -p pkg && gem build briefly.gemspec --output pkg/briefly.gem
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: built-gem
+          path: pkg/briefly.gem
+          retention-days: 1
+
+  # Holds the only credential in this workflow, so it runs no project code: it downloads the gem
+  # the build job produced, signs it, and pushes it. `environment: release` is what gates it on a
+  # person, and it is also the value the rubygems.org trusted publisher entry matches on.
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test, build]
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: built-gem
+          path: pkg/
+
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "4.0"
+          bundler-cache: false
+
+      - uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a # v2.1.0
+
+      # Signs the exact bytes the build job produced, using this run's ambient OIDC identity, rather
+      # than relying on implicit signing that varies by RubyGems client version.
+      - run: gem exec --conservative sigstore-cli:0.2.3 sign pkg/briefly.gem --bundle pkg/briefly.gem.sigstore.json
+      - run: gem push pkg/briefly.gem --attestation pkg/briefly.gem.sigstore.json
+
+  # A third job, and the boundary is the point: it holds release-asset writes and an attestation
+  # identity, which the build job must not have, and it needs the rubygems.org credential not to be
+  # present. `needs: [publish]` is what keeps the assets behind the approval gate.
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [publish]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: built-gem
+          path: pkg/
+
+      # Run from inside pkg/ so the names in the manifest are the names the assets carry on the
+      # release. A manifest listing pkg/briefly.gem cannot be checked against a downloaded briefly.gem.
+      - run: (cd pkg && sha256sum *) > SHA256SUMS
+
+      - uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
+        with:
+          subject-checksums: SHA256SUMS
+
+      - name: Publish the release and attach the gem
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --draft
+          gh release upload "$GITHUB_REF_NAME" pkg/briefly.gem SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
