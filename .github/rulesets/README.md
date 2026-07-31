@@ -15,6 +15,11 @@ gh api repos/svyatov/briefly/rulesets/RULESET_ID
 the first and both then apply. Use `PUT` with the id from `gh api repos/svyatov/briefly/rulesets`
 for anything that already exists.
 
+A `GET` returns keys that a `PUT` then rejects, so a body copied out of the API is not necessarily
+one you can send back. `code_coverage` reads back with `"max_coverage_drop": null`, and sending that
+same null fails with `data matches no possible input`; omitting the key applies cleanly and reads
+back as null again. Apply what is here rather than a round-tripped response.
+
 ## main.json
 
 A pull request is the only path onto `main`, and it merges only when `CI`, `Analyze (ruby)` and
