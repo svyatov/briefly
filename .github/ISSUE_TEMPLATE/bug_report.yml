@@ -1,0 +1,102 @@
+name: Bug report
+description: A shortcut, pack or facade behaved differently from what the README says
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every shortcut is compiled into a real method by
+        [candor](https://github.com/svyatov/candor), so a wrong `arity`, `parameters` or
+        `source_location` may be a defect there rather than here. The version fields below are what
+        let triage tell the two apart, so please fill them in even when the answer looks obvious.
+
+  - type: input
+    id: briefly-version
+    attributes:
+      label: briefly version
+      description: "`bundle list briefly`, or read `Briefly::VERSION` in a console."
+      placeholder: 0.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: candor-version
+    attributes:
+      label: candor version
+      description: "`bundle list candor`. briefly pins `~> 0.2.0`, so this can differ from the last release you saw."
+      placeholder: 0.2.1
+    validations:
+      required: true
+
+  - type: input
+    id: ruby-version
+    attributes:
+      label: Ruby version
+      description: "`ruby -v`. briefly supports 3.2 and up."
+      placeholder: 3.4.1
+    validations:
+      required: true
+
+  - type: input
+    id: rails-version
+    attributes:
+      label: Rails version
+      description: Write "none" if this has nothing to do with Rails. The Rails packs need 7.2 or newer.
+      placeholder: 8.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      description: Where the behavior showed up. Pick "not sure" rather than guessing.
+      options:
+        - Core DSL (shortcut, memoize, rescue_from, namespace, use)
+        - Facade behavior (arity, source_location, respond_to?, stubbing)
+        - The rails umbrella pack
+        - The rails/db pack
+        - The rails/config, rails/env or rails/view pack
+        - The rails/reload pack
+        - The install generator
+        - RBS signatures in sig/
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: web-server
+    attributes:
+      label: Web server
+      description: Only for a memoization or thread-safety report. Leave blank otherwise.
+      placeholder: puma 7.0.0, 5 threads
+
+  - type: textarea
+    id: definition
+    attributes:
+      label: The facade that reproduces it
+      description: The `Briefly.define` block, cut down as far as it still reproduces, plus the call that misbehaves.
+      render: ruby
+      placeholder: |
+        App = Briefly.define do
+          shortcut(:thing) { ... }
+        end
+
+        App.thing   # => what you got
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: Link the README section or the documented behavior you are measuring against, if there is one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: backtrace
+    attributes:
+      label: Error and backtrace
+      description: The full message and backtrace, if the failure raised. Leave blank if it did not.
+      render: text

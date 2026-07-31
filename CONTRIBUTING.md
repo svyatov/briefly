@@ -53,9 +53,45 @@ instead.
 So `sig/` is verified by review, not by a checker. Keep it small, and change it in the same commit
 as the code it describes.
 
+## What an acceptable change looks like
+
+[CLAUDE.md](CLAUDE.md) is the standard a change is measured against. It is written for coding agents
+and it is tracked for exactly this reason: its Invariants section lists the properties that make the
+gem safe, each one pinned by a test, and its Testing, Documentation Style and Changelog Format
+sections say the rest. Read the invariants before changing anything under `lib/`. Every one of them
+has a test you can find first, and breaking one silently is the failure mode this gem is most
+exposed to.
+
+A change that adds or alters behavior arrives with a test. Coverage is enforced at 100%, so an
+untested branch fails CI rather than reaching review, but the number is a floor and not the point:
+the test should pin the behavior you are claiming, in the way the existing tests pin theirs. A guard
+test that asserts an absence needs a fixture proving the guard can fail.
+
 ## Commits and pull requests
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
-Before opening a PR: tests pass, coverage is 100%, `bundle exec rake` is green, and `CHANGELOG.md`'s
-`## Unreleased` section reflects the net user-facing change.
+Fork the repository, branch off `main`, and open a pull request against `main`. Pull requests are
+squash merged, so the branch's history is yours to keep messy; the pull request title is what lands
+on `main` and should be the Conventional Commit line.
+
+Before opening one: `bundle exec rake` is green, coverage is 100%, and `CHANGELOG.md`'s
+`## Unreleased` section reflects the net user-facing change since the last release rather than a
+history of what you tried. The pull request template asks for the rest.
+
+## Deprecating and removing
+
+A public item, meaning anything the README's Versioning section covers, gets a released deprecation
+before it is removed. Ship the deprecation in one release with the old path still working and a
+runtime warning that names the replacement and the earliest version the removal can land in, then
+remove it in a later release. While the version is below `1.0.0` both of those are MINOR bumps.
+
+The v0.2.0 release predates this policy and removed three things without one: `App.reset!`, the
+top-level `memoize` verb, and name-scoped `rescue_from`. The changelog names the replacement for
+each, which is what a deprecation warning would have said, a release earlier.
+
+## Who decides
+
+Leonid Svyatov ([@svyatov](https://github.com/svyatov)) maintains `briefly`, reviews and merges every
+change, and cuts every release. There is no second maintainer and no succession arranged. If that
+ever changes, this section is where it will say so.
