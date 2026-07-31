@@ -1,0 +1,8 @@
+# frozen_string_literal: true
+
+# Tracks rails/rails HEAD, so no lockfile is committed beside this one: there is no released version
+# to pin, and a recorded git SHA would go stale the moment upstream pushes. The CI leg using this
+# file is advisory (continue-on-error) for the same reason.
+ENV["RAILS_VERSION"] = "edge"
+
+eval_gemfile File.expand_path("../Gemfile", __dir__)

@@ -8,11 +8,28 @@ bundle exec rake     # rubocop + rbs validate + minitest
 bin/console          # irb with briefly loaded
 ```
 
-Test against a specific Rails version the way CI does:
+Test against a specific Rails version the way CI does. Each file under `gemfiles/` pins one Rails
+line and evaluates the root `Gemfile`, and the three released lines commit a lockfile beside theirs:
 
 ```sh
-rm -f Gemfile.lock && RAILS_VERSION=7.2 bundle install && bundle exec rake
+BUNDLE_GEMFILE=gemfiles/rails_7.2.gemfile bundle install
+BUNDLE_GEMFILE=gemfiles/rails_7.2.gemfile bundle exec rake
 ```
+
+`gemfiles/rails_edge.gemfile` tracks `rails/rails` HEAD and commits no lockfile, so it resolves fresh
+every time. That is why the edge and `ruby-head` CI legs are advisory rather than blocking.
+
+Changing the root `Gemfile` means regenerating all four lockfiles, or CI fails the frozen install
+before it runs a test. Regenerate them on Ruby 3.2, the lowest version the gemspec supports:
+
+```sh
+mise x ruby@3.2 -- bundle lock
+for v in 7.2 8.0 8.1; do BUNDLE_GEMFILE="gemfiles/rails_$v.gemfile" mise x ruby@3.2 -- bundle lock; done
+```
+
+The Ruby version matters. A lockfile resolved on 4.0 can pin a gem that requires 3.3 or newer, and
+the 3.2 CI legs then fail the frozen install rather than re-resolving, which is the whole point of
+freezing. Resolving on the oldest supported Ruby picks versions every leg in the matrix can install.
 
 Only `activesupport` is needed: the Rails packs are exercised against a real
 `ActiveSupport::Reloader` subclass and a hand-rolled `::Rails` double. There is no dummy app.

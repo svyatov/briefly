@@ -7,8 +7,9 @@ concurrency:
 on:
   push:
     branches: ["main"]
+  # Deliberately unfiltered by base branch: a pull request stacked on another branch is still a
+  # change request, and a base filter of "main" silently runs nothing for it.
   pull_request:
-    branches: ["main"]
 
 permissions:
   contents: read
@@ -16,6 +17,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     name: Ruby ${{ matrix.ruby_version }} / Rails ${{ matrix.rails_version }}
     strategy:
       fail-fast: false
@@ -25,14 +27,16 @@ jobs:
 
     env:
       COVERAGE: true
-      RAILS_VERSION: ${{ matrix.rails_version }}
+      # Each gemfile pins one Rails line and evaluates the root Gemfile, so the dependency list stays
+      # in one place. The three released lines commit a lockfile beside theirs, which is what makes
+      # setup-ruby install in deployment mode; the edge gemfile has nothing stable to lock, so the
+      # action resolves that leg itself.
+      BUNDLE_GEMFILE: ${{ github.workspace }}/gemfiles/rails_${{ matrix.rails_version }}.gemfile
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - run: rm -f Gemfile.lock
-
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: ${{ matrix.ruby_version }}
           bundler-cache: true
@@ -46,8 +50,24 @@ jobs:
         if: ${{ matrix.ruby_version == '4.0' && matrix.rails_version == '8.1' }}
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: svyatov/briefly
         if: ${{ matrix.ruby_version == '4.0' && matrix.rails_version == '8.1' }}
+
+  # One check with a stable name, so the branch ruleset has something to require. Every matrix leg's
+  # name carries its Ruby and Rails version, so requiring the legs directly would mean editing the
+  # ruleset every time the matrix moves. The advisory legs set continue-on-error, so a ruby-head or
+  # Rails edge failure reports without reaching this job.
+  ci:
+    name: CI
+    needs: [build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the matrix result
+        run: |
+          echo "build: ${{ needs.build.result }}"
+          test "${{ needs.build.result }}" = "success"
