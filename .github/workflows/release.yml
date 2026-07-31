@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# `bundler-cache: true` would set frozen mode for us, but it also restores a cache, which is a
+# poisoning vector in a workflow that can authenticate to rubygems.org. Setting frozen mode here
+# keeps the half worth keeping: the test job installs what Gemfile.lock records or fails, and
+# nothing in this workflow restores anything.
+env:
+  BUNDLE_FROZEN: "true"
+
 jobs:
   # No Bundler cache anywhere in this workflow, including here: a restored cache is a
   # cache-poisoning vector in a tag-triggered publish, and a release is rare enough to pay for it.
@@ -86,34 +93,39 @@ jobs:
       - run: gem exec --conservative sigstore-cli:0.2.3 sign pkg/briefly.gem --bundle pkg/briefly.gem.sigstore.json
       - run: gem push pkg/briefly.gem --attestation pkg/briefly.gem.sigstore.json
 
-  # A third job, and the boundary is the point: it holds release-asset writes and an attestation
-  # identity, which the build job must not have, and it needs the rubygems.org credential not to be
-  # present. `needs: [publish]` is what keeps the assets behind the approval gate.
+  # The release carries notes and nothing else. The gem is on rubygems.org, which serves back the
+  # sigstore attestation the publish job pushed, so attaching a copy here would be a second artifact
+  # to verify with no second thing proved, and it would pull in an SBOM and a signed hash manifest
+  # to describe it. A third job all the same: it holds `contents: write`, which the credentialed
+  # publish job must not, and `needs: [publish]` keeps even the notes behind the approval gate.
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [publish]
     permissions:
       contents: write
-      id-token: write
-      attestations: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          name: built-gem
-          path: pkg/
+          persist-credentials: false
 
-      # Run from inside pkg/ so the names in the manifest are the names the assets carry on the
-      # release. A manifest listing pkg/briefly.gem cannot be checked against a downloaded briefly.gem.
-      - run: (cd pkg && sha256sum *) > SHA256SUMS
-
-      - uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
-        with:
-          subject-checksums: SHA256SUMS
-
-      - name: Publish the release and attach the gem
+      # Generated notes are a list of merged pull requests, which says something different from
+      # what the changelog says about the same release. Take the changelog's own words instead, and
+      # fail rather than publish a release describing nothing.
+      - name: Take the release body from CHANGELOG.md
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --draft
-          gh release upload "$GITHUB_REF_NAME" pkg/briefly.gem SHA256SUMS
+          ruby -e '
+            version = ENV.fetch("GITHUB_REF_NAME").delete_prefix("v")
+            section = File.read("CHANGELOG.md")[/^## v#{Regexp.escape(version)} \([^)]*\)\n(.*?)(?=^## |\z)/m, 1]
+            abort "CHANGELOG.md has no section for v#{version}" if section.nil? || section.strip.empty?
+            File.write("RELEASE_NOTES.md", "#{section.strip}\n")
+          '
+
+      - name: Publish the release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file RELEASE_NOTES.md \
+            --verify-tag
         env:
           GH_TOKEN: ${{ github.token }}
