@@ -1,10 +1,10 @@
-# Security Policy
+# Security policy
 
 ## Supported versions
 
 | Version | Supported |
 |---------|-----------|
-| 0.x     | ✅        |
+| 0.x     | Yes       |
 
 ## Reporting a vulnerability
 
