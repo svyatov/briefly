@@ -39,6 +39,6 @@
       }
     },
     { "type": "code_quality", "parameters": { "severity": "errors" } },
-    { "type": "code_coverage", "parameters": { "minimum_coverage": 100, "max_coverage_drop": null } }
+    { "type": "code_coverage", "parameters": { "minimum_coverage": 100 } }
   ]
 }
