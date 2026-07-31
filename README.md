@@ -1,18 +1,25 @@
-# briefly &nbsp; [![Gem Version](https://badge.fury.io/rb/briefly.svg)](https://rubygems.org/gems/briefly) [![CI](https://github.com/svyatov/briefly/actions/workflows/main.yml/badge.svg)](https://github.com/svyatov/briefly/actions/workflows/main.yml) [![codecov](https://codecov.io/gh/svyatov/briefly/branch/main/graph/badge.svg)](https://codecov.io/gh/svyatov/briefly) [![Documentation](https://img.shields.io/badge/docs-rubydoc.info-blue.svg)](https://rubydoc.info/gems/briefly) [![Ruby](https://img.shields.io/badge/ruby-%3E%3D%203.2-CC342D.svg)](https://www.ruby-lang.org) [![Types: RBS](https://img.shields.io/badge/types-RBS-8A2BE2.svg)](https://github.com/svyatov/briefly/tree/main/sig)
+# briefly
 
-A terse, curated facade over your application's most reached-for objects. Thread-safe, reload-correct,
-with a Rails pack included.
+A terse, curated facade over your application's most reached-for objects.
 
-Every app grows an `App` module full of `def self.config = Rails.configuration`. `briefly` gives
-you that module without writing it, as real methods. There is no `method_missing`, so `respond_to?`,
-console tab-completion and test stubbing all work. Each shortcut carries its body's `arity` and
-parameter kinds (keyword names are exact, positionals get generated ones), and its `source_location`
-is the block you declared, so jump-to-definition lands in your initializer rather than inside the gem.
-That fabrication is [candor](https://github.com/svyatov/candor), extracted from this gem and its only
-runtime dependency; candor itself has none.
+[![gem](https://img.shields.io/gem/v/briefly)](https://rubygems.org/gems/briefly)
+[![CI](https://github.com/svyatov/briefly/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/svyatov/briefly/actions/workflows/main.yml)
+[![coverage](https://codecov.io/gh/svyatov/briefly/branch/main/graph/badge.svg)](https://app.codecov.io/gh/svyatov/briefly)
+
+- **Ruby 3.2 and up.** Rails is optional: the gem does not declare it, and `Briefly::Rails` is
+  autoloaded only when you name it. The Rails packs themselves need Rails 7.2 or newer.
+- **25 shortcuts across six packs.** Config, env, view, db, instrument and reload, each usable on
+  its own or taken together through the `"rails"` umbrella.
+- **One runtime dependency.** [candor](https://github.com/svyatov/candor), which is itself
+  dependency-free.
+
+```bash
+bundle add briefly
+```
+
+Then, in `config/initializers/app.rb`:
 
 ```ruby
-# config/initializers/app.rb
 App = Briefly.define do
   use "rails"
   shortcut(:redis) { REDIS_POOL }
@@ -25,16 +32,16 @@ App.redis                    # => REDIS_POOL
 App.local?                   # => true in development and test
 ```
 
-## Installation
+Every app grows an `App` module full of `def self.config = Rails.configuration`. `briefly` gives
+you that module without writing it, as real methods. There is no `method_missing`, so `respond_to?`,
+console tab-completion and test stubbing all work. Each shortcut carries its body's `arity` and
+parameter kinds (keyword names are exact, positionals get generated ones), and its `source_location`
+is the block you declared, so jump-to-definition lands in your initializer rather than inside the gem.
+That fabrication is [candor](https://github.com/svyatov/candor), extracted from this gem.
 
-```ruby
-gem "briefly"
-```
+## The Rails generator
 
-Ruby >= 3.2. The one runtime dependency is `candor`. Rails is optional: the gem does not declare
-it, and `Briefly::Rails` is autoloaded only when you name it.
-
-In a Rails app, `rails g briefly:install` writes `config/initializers/briefly.rb` — a working `App`
+In a Rails app, `rails g briefly:install` writes `config/initializers/briefly.rb`: a working `App`
 facade plus a commented, concern-grouped map of every shortcut the `rails` pack gives you. Pass a
 name (`rails g briefly:install Facade`) to call the constant something else. Re-run it after upgrading
 to refresh the map; Rails prompts before overwriting. The generator loads only under `rails generate`,
@@ -43,7 +50,8 @@ so it adds no runtime dependency.
 ## Core concepts
 
 A **facade** is the object `Briefly.define` returns. You assign it to a constant of your choosing;
-`briefly` never installs one for you. Multiple independent facades share no state:
+`briefly` never installs one for you. Multiple independent facades share no state, so an initializer
+can declare as many as it needs:
 
 ```ruby
 App   = Briefly.define { use "rails" }
@@ -51,7 +59,8 @@ Admin = Briefly.define { shortcut(:audit_log) { AuditLog } }
 ```
 
 A **shortcut** is a name plus a body. The body is always attached to `shortcut`, one block in one
-place, and runs bound to the facade, so it can reach the facade's other shortcuts:
+place, and runs bound to the facade, so it can reach the facade's other shortcuts. Inside the
+initializer's `Briefly.define` block:
 
 ```ruby
 Briefly.define do
@@ -67,8 +76,8 @@ overrides it silently; that is how you override a pack's shortcut.
 
 ## `memoize`
 
-`shortcut` returns the shortcut you refine. Chain `.memoize` onto it to cache the value — computed once,
-then reused for the process lifetime:
+`shortcut` returns the shortcut you refine. Chain `.memoize` onto it in your initializer to cache the
+value, computed once, then reused for the process lifetime:
 
 ```ruby
 Briefly.define do
@@ -76,8 +85,9 @@ Briefly.define do
 end
 ```
 
-To memoize a shortcut you didn't declare here — one a pack installed, say — call `shortcut(name)`
-with no block to fetch it, then chain onto that. A bodiless `shortcut` never re-declares:
+To memoize a shortcut you didn't declare yourself, one a pack installed, say, call `shortcut(name)`
+with no block to fetch it, then chain onto that. A bodiless `shortcut` never re-declares, so this
+also belongs in the initializer:
 
 ```ruby
 Briefly.define do
@@ -95,7 +105,8 @@ retried on next call.
 
 That guarantee is per-cell, and does not compose. A memoized shortcut whose body *reads* a
 rescue-backed shortcut succeeds, so its own value (containing the fallback) is cached for the
-process lifetime, even after the inner shortcut recovers:
+process lifetime, even after the inner shortcut recovers. Two initializer declarations that trap
+you:
 
 ```ruby
 shortcut(:flaky) { external_call }.rescue_from(SomeError) { "unknown" }.memoize
@@ -103,13 +114,14 @@ shortcut(:summary) { "build #{flaky}" }.memoize   # <- caches "build unknown" fo
 ```
 
 Clearing is a neutral primitive. Management lives behind one accessor, `App.briefly`, so names like
-`configure`, `shortcuts`, `shortcut?` and `clear_memos!` stay yours to use as shortcuts:
+`configure`, `shortcuts`, `shortcut?` and `clear_memos!` stay yours to use as shortcuts. Call it
+from application code:
 
 ```ruby
 App.briefly.clear_memos!   # => App     (thread-safe)
 ```
 
-Reclaim one of those names and `App.configure` calls *your* shortcut — the old management call now
+Reclaim one of those names and `App.configure` calls *your* shortcut; the old management call now
 lives only at `App.briefly.configure`. Worth knowing when porting pre-0.2.0 code: a leftover
 `App.configure { ... }` won't raise if a `configure` shortcut exists, it just runs the shortcut and,
 like any non-yielding method, drops the block.
@@ -121,7 +133,7 @@ like any non-yielding method, drops the block.
 The handler's return value becomes the shortcut's return value. To guard one shortcut, chain
 `.rescue_from(error_class) { |e, name| ... }` onto it. The top-level `rescue_from` verb is for what a
 single shortcut can't voice: a facade-wide handler, consulted after each shortcut's own. Error class
-first, always:
+first, always. Both forms belong in the initializer:
 
 ```ruby
 Briefly.define do
@@ -131,7 +143,7 @@ Briefly.define do
 end
 ```
 
-The top-level `rescue_from` takes no shortcut names — pass any and it raises `ArgumentError`, pointing
+The top-level `rescue_from` takes no shortcut names. Pass any and it raises `ArgumentError`, pointing
 you at `shortcut(name).rescue_from(...)`. Scoping a handler to a shortcut lives in one channel, the
 shortcut itself, so its name is never written twice to annotate it. To share one handler across a few
 shortcuts, chain `.rescue_from` onto each; to cover them all, register it facade-wide.
@@ -140,9 +152,10 @@ Unlike a shortcut body, a handler is not bound to the facade. It is called as
 `handler.call(error, name)`, so `self` stays whatever it was where you wrote the block. Reach for
 constants (`Rails.logger`, `Sentry`) rather than bare shortcut names inside a handler.
 
-> **A facade-wide `rescue_from(StandardError)` catches your own bugs, not just your app's.**
+> [!WARNING]
+> A facade-wide `rescue_from(StandardError)` catches your own bugs, not just your app's.
 > `briefly` cannot tell an error raised *by* a shortcut body from one raised *about* the call; a
-> typo and a dead Redis both arrive as a `StandardError`:
+> typo and a dead Redis both arrive as a `StandardError`. Written in an initializer:
 >
 > ```ruby
 > shortcut(:host) { Rails.aplication.config.host }   # typo -> NoMethodError
@@ -160,8 +173,10 @@ constants (`Rails.logger`, `Sentry`) rather than bare shortcut names inside a ha
 > body calling another with a bad argument list is a different matter: that raises *inside* the
 > calling body, where the calling shortcut's own handler sees it like any other error.
 
-> **⚠️ `{}` needs parentheses (standalone `rescue_from` only).** `rescue_from StandardError { ... }`
-> binds the block to `StandardError`, not to `rescue_from`, and raises `NoMethodError`. Use either form:
+> [!IMPORTANT]
+> `{}` needs parentheses, on the standalone `rescue_from` only. `rescue_from StandardError { ... }`
+> binds the block to `StandardError`, not to `rescue_from`, and raises `NoMethodError`. Use either
+> form inside your `Briefly.define` block:
 >
 > ```ruby
 > rescue_from StandardError do |e| ... end   # do/end, no parens
@@ -188,11 +203,12 @@ For a raised error, the first `is_a?` match wins, searching in this order:
 | 2 | Facade-wide handlers | last registered first |
 | 3 | Global handlers (`Briefly.rescue_from`) | last registered first |
 
-No match → the error propagates.
+With no match, the error propagates.
 
 ## `namespace`
 
-`namespace` groups shortcuts behind a name, so the root keyspace stays yours:
+`namespace` groups shortcuts behind a name, so the root keyspace stays yours. In the initializer,
+and then anywhere in the app:
 
 ```ruby
 App = Briefly.define do
@@ -228,7 +244,8 @@ Two limits, both deliberate:
 ## Packs
 
 A pack is any object responding to `#install(builder, **opts)`. Options are optional: Ruby drops an
-empty `**` splat, so a pack taking none needs no keyword parameter.
+empty `**` splat, so a pack taking none needs no keyword parameter. Put the pack in a file your
+app already loads, such as `lib/redis_pack.rb`, and `use` it from the initializer:
 
 ```ruby
 module RedisPack
@@ -250,7 +267,7 @@ exactly what `Briefly::Rails::Reload` does. The core stays framework-agnostic; p
 ### Options
 
 Keywords passed to `use` reach the pack's `install`. Ruby drops an empty `**` splat, so a pack that
-takes no options needs no keyword parameter:
+takes no options needs no keyword parameter. The same pack file, now taking a `url:`:
 
 ```ruby
 module RedisPack
@@ -267,7 +284,8 @@ Api = Briefly.define { use RedisPack, url: "redis://cache:6379" }
 ### Short names
 
 `Briefly.register` maps a name to a pack, so `use` can take a string or symbol. There is no
-inflection and no path guessing; the registry is the only source of truth:
+inflection and no path guessing; the registry is the only source of truth. Register in the
+initializer, before the `define` that names it:
 
 ```ruby
 Briefly.register("myapp/redis", RedisPack)          # a pack object
@@ -315,7 +333,7 @@ Nothing in the pack is memoized. `helpers`, `routes` and `renderer` are live loo
 already caches them on objects it refreshes on reload, so caching them again would only go stale.
 It still composes `Briefly::Rails::Reload`, because *your* memoized shortcuts need clearing.
 
-Need a custom renderer? Override it; last declaration wins:
+Need a custom renderer? Override it in the initializer; last declaration wins:
 
 ```ruby
 App = Briefly.define do
@@ -324,7 +342,7 @@ App = Briefly.define do
 end
 ```
 
-`Briefly::Rails` is an umbrella over five packs, each usable on its own:
+`Briefly::Rails` is an umbrella over six packs, each usable on its own:
 
 | pack | short name | shortcuts |
 |---|---|---|
@@ -333,6 +351,9 @@ end
 | `Briefly::Rails::View` | `"rails/view"` | `helpers`, `routes`, `renderer`, `render` |
 | `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `select`, `query`, `connected_to`, `reading`, `writing` |
 | `Briefly::Rails::Instrument` | `"rails/instrument"` | `instrument` |
+| `Briefly::Rails::Reload` | `"rails/reload"` | none; clears memos on every code reload |
+
+Take only the parts you want, in the initializer:
 
 ```ruby
 Worker = Briefly.define do
@@ -346,13 +367,15 @@ end
 
 | shortcut | aliases | value |
 |---|---|---|
-| `connection` | `conn` | forwards keywords and the block to `base.with_connection` — yields the connection, auto-releases |
+| `connection` | `conn` | forwards keywords and the block to `base.with_connection`, yielding the connection and auto-releasing |
 | `transaction` | `txn` | forwards keywords and the block to `base.transaction` |
-| `select` | | `base.with_connection { \|c\| c.select_all(sql) }` — a read (SELECT) on the cache-aware path |
-| `query` | | `base.with_connection { \|c\| c.exec_query(sql) }` — arbitrary SQL, writes and DDL included |
+| `select` | | `base.with_connection { \|c\| c.select_all(sql) }`, a read (SELECT) on the cache-aware path |
+| `query` | | `base.with_connection { \|c\| c.exec_query(sql) }`, arbitrary SQL, writes and DDL included |
 | `connected_to` | | forwards every argument to `base.connected_to` (`role:`, `shard:`, `prevent_writes:`) |
 | `reading` | | runs the block under the `:reading` role |
 | `writing` | | runs the block under the `:writing` role |
+
+Declare the namespace in the initializer, then call it from application code:
 
 ```ruby
 App = Briefly.define do
@@ -365,14 +388,14 @@ App.db.conn { |c| c.select_value("select count(*) from users") }
 ```
 
 `select` and `query` are the two raw-SQL helpers, differing only in which adapter path they take.
-`select(sql, *binds)` runs a read through `select_all` — the path Rails recommends for a raw SELECT,
+`select(sql, *binds)` runs a read through `select_all`, the path Rails recommends for a raw SELECT,
 returning an `ActiveRecord::Result` without clearing the query cache. `query(sql, *binds)` runs
 arbitrary SQL through `exec_query`: reads, writes, and DDL all execute. The name tells you which
 you're reaching for; neither polices the SQL it's handed, so `select` will happily run a write you
-give it — the split is name and cache-path, not a runtime guard.
+give it. The split is name and cache-path, not a runtime guard.
 
 Both sanitize through `base.sanitize_sql_array` when binds are given, and pass the statement through
-untouched when they are not. Positional and named binds both work:
+untouched when they are not. Positional and named binds both work, from application code:
 
 ```ruby
 App.db.select("select * from users where name like '%ada%'")         # no binds, passed through
@@ -388,12 +411,12 @@ not a convenience: always pass untrusted values as binds. The bindless path is u
 merely a read one.
 
 `connection`/`conn` mirrors `transaction`: it forwards to `with_connection`, yields the leased
-connection, and auto-releases at block exit, so nothing leaks outside a request. It requires a block —
+connection, and auto-releases at block exit, so nothing leaks outside a request. It requires a block;
 there is no bare-lease accessor. Anyone who genuinely needs a held raw lease calls `lease_connection`
 on their model directly.
 
-`reading` and `writing` *route* a block — everything inside runs under that connection role, so you
-send specific reads to a replica or pin a write to the primary:
+`reading` and `writing` *route* a block. Everything inside runs under that connection role, so from
+application code you send specific reads to a replica or pin a write to the primary:
 
 ```ruby
 App.db.reading { App.db.select("select * from reports") }  # runs on the replica
@@ -401,7 +424,8 @@ App.db.writing { Audit.create!(event: "export") }          # pinned to the prima
 ```
 
 They're sugar over `connected_to`, which is also a shortcut in its own right and forwards the whole
-Rails surface — any role (not just reading/writing), plus `shard:` and `prevent_writes:`:
+Rails surface: any role, not just reading and writing, plus `shard:` and `prevent_writes:`. Also
+from application code:
 
 ```ruby
 App.db.connected_to(role: :analytics) { Report.all.to_a }   # a custom role
@@ -413,7 +437,7 @@ The `reading`/`writing` sugar pins its role: a `role:` you pass through it can't
 always reads. All of this needs a multi-database app: `base` must be `ActiveRecord::Base` or the
 abstract class that declared `connects_to(database: { ... })`. On a concrete model `connected_to`
 raises `NotImplementedError`, and in a single-database app with no matching connection
-`App.db.reading { ... }` raises `ActiveRecord::ConnectionNotDefined` — these are a multi-DB tool, not a
+`App.db.reading { ... }` raises `ActiveRecord::ConnectionNotDefined`. These are a multi-DB tool, not a
 role flag.
 
 **Pass `base:` as a String, not the class.** A pack is `use`d from an initializer, where naming an
@@ -425,8 +449,8 @@ The pack memoizes nothing and wires no lifecycle hook, so it works without a boo
 
 ### `Briefly::Rails::Reload`
 
-`Briefly::Rails` composes it. Use it alone for a facade with no framework shortcuts that still
-memoizes objects holding on to reloadable application classes:
+`Briefly::Rails` composes it. Use it alone, in an initializer, for a facade with no framework
+shortcuts that still memoizes objects holding on to reloadable application classes:
 
 ```ruby
 Admin = Briefly.define do
@@ -454,7 +478,7 @@ bodies call into each other can deadlock, like any pair of mutually-locking obje
 
 ## Testing
 
-Shortcuts are real methods, so nothing special is needed:
+Shortcuts are real methods, so nothing special is needed in a test file:
 
 ```ruby
 allow(App).to receive(:redis).and_return(fake_redis)   # rspec-mocks verifies it
@@ -481,6 +505,8 @@ We do not fake this with an RBS-only `method_missing`; the gem has none.
 
 ## Migrating a hand-rolled `App`
 
+What the initializer replaces, and what it becomes:
+
 ```ruby
 # before
 module App
@@ -506,9 +532,33 @@ end
 memoized, and `redis` (which you *do* want memoized) is cleared on every dev reload by the Reload
 pack that `Briefly::Rails` composes.
 
+## Versioning
+
+`briefly` follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The public API it
+covers is what an application touches: `Briefly.define`, `Briefly.register`, `Briefly.pack`,
+`Briefly.rescue_from` and `Briefly.rescues`; the `Builder` DSL inside a `define` block (`shortcut`,
+`namespace`, `rescue_from`, `use`); the refinements `shortcut` returns (`memoize`, `rescue_from`);
+the management surface behind `App.briefly`; the canonical names and aliases every shipped pack
+installs; and the error classes under `Briefly::Error`.
+
+Outside that promise: anything a shortcut compiles to internally, every `__`-prefixed private method
+on `Facade`, and the RBS signatures in `sig/`, which describe the static surface and are revised
+alongside it.
+
+While the version stays below `1.0.0`, an incompatible change ships in a MINOR bump and a compatible
+fix in a PATCH, so a MINOR bump is the one that may need you to read the changelog.
+
 ## Contributing
 
-Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), and
+[CHANGELOG.md](CHANGELOG.md) for what has changed between releases.
+
+Questions and bug reports both go to [GitHub Issues](https://github.com/svyatov/briefly/issues).
+
+## Maintenance
+
+One person maintains `briefly`, actively, in their spare time. Issues and pull requests get a reply,
+and a bug on a supported Ruby or Rails version gets a fix. A large feature request may not.
 
 ## License
 
