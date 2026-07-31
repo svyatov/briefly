@@ -8,10 +8,23 @@ bundle exec rake     # rubocop + rbs validate + minitest
 bin/console          # irb with briefly loaded
 ```
 
-Test against a specific Rails version the way CI does:
+Test against a specific Rails version the way CI does. Each file under `gemfiles/` pins one Rails
+line and evaluates the root `Gemfile`, and the three released lines commit a lockfile beside theirs:
 
 ```sh
-rm -f Gemfile.lock && RAILS_VERSION=7.2 bundle install && bundle exec rake
+BUNDLE_GEMFILE=gemfiles/rails_7.2.gemfile bundle install
+BUNDLE_GEMFILE=gemfiles/rails_7.2.gemfile bundle exec rake
+```
+
+`gemfiles/rails_edge.gemfile` tracks `rails/rails` HEAD and commits no lockfile, so it resolves fresh
+every time. That is why the edge and `ruby-head` CI legs are advisory rather than blocking.
+
+Changing the root `Gemfile` means regenerating all four lockfiles, or CI fails the frozen install
+before it runs a test:
+
+```sh
+bundle lock
+for v in 7.2 8.0 8.1; do BUNDLE_GEMFILE="gemfiles/rails_$v.gemfile" bundle lock; done
 ```
 
 Only `activesupport` is needed: the Rails packs are exercised against a real

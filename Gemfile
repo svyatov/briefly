@@ -12,7 +12,8 @@ gem "minitest", "~> 6.0"
 
 # The forwarding packs are exercised against a real ActiveSupport::Reloader and a hand-rolled ::Rails
 # double; the DB pack runs against real Active Record on in-memory SQLite — no railties, no dummy app.
-# activerecord tracks the same version as activesupport so the matrix stays coherent. CI pins per cell.
+# activerecord tracks the same version as activesupport so the matrix stays coherent. Each file under
+# gemfiles/ sets RAILS_VERSION and evaluates this one, which is how CI pins a line per matrix cell.
 if ENV["RAILS_VERSION"] == "edge"
   # The glob spans activemodel too: activerecord@HEAD depends on it at the same unreleased version, so
   # bundler must discover that sibling's gemspec from the repo to resolve activerecord from git.

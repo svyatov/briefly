@@ -1,9 +1,18 @@
 version: 2
 updates:
+  # Four lockfiles now resolve the same dependency list, so an ungrouped bump opens four pull
+  # requests for one gem. Development gems are grouped into one; candor is the runtime dependency
+  # and stays on its own, because a bump there changes what applications install.
   - package-ecosystem: bundler
-    directory: "/"
+    directories:
+      - "/"
+      - "/gemfiles"
     schedule:
       interval: weekly
+    groups:
+      development:
+        exclude-patterns: ["candor"]
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
