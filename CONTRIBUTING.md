@@ -23,9 +23,13 @@ Changing the root `Gemfile` means regenerating all four lockfiles, or CI fails t
 before it runs a test. Regenerate them on Ruby 3.2, the lowest version the gemspec supports:
 
 ```sh
-mise x ruby@3.2 -- bundle lock
-for v in 7.2 8.0 8.1; do BUNDLE_GEMFILE="gemfiles/rails_$v.gemfile" mise x ruby@3.2 -- bundle lock; done
+mise x ruby@3.2 -- bundle exec rake lock:refresh
 ```
+
+Dependabot refreshes the root `Gemfile.lock` alone, because it matches a lockfile by the name beside
+a `Gemfile` it fetched and `gemfiles/rails_8.0.gemfile.lock` is not such a name. Run the task above
+whenever a Dependabot pull request touches the root lock, or the matrix locks drift out of step with
+it. The task refuses to run on any Ruby but 3.2, for the reason below.
 
 The Ruby version matters. A lockfile resolved on 4.0 can pin a gem that requires 3.3 or newer, and
 the 3.2 CI legs then fail the frozen install rather than re-resolving, which is the whole point of

@@ -20,6 +20,34 @@ task :rbs do
   sh "rbs #{RBS_LIBS.map { |lib| "-r #{lib}" }.join(" ")} -I sig validate"
 end
 
+# The Ruby the gemspec floors at. A lockfile resolved on a newer Ruby can pin a gem that requires
+# 3.3 or newer, and the 3.2 legs then fail the frozen install rather than re-resolving.
+LOCK_RUBY = "3.2"
+
+# Dependabot refreshes Gemfile.lock only. It matches lockfiles by the name beside a Gemfile it
+# fetched, and `gemfiles/rails_8.0.gemfile.lock` is not such a name, so the matrix locks have to be
+# refreshed by hand: run this whenever a Dependabot pull request touches the root lock.
+desc "Refresh every committed lockfile (root Gemfile plus the Rails matrix gemfiles)"
+task "lock:refresh" do
+  unless RUBY_VERSION.start_with?("#{LOCK_RUBY}.")
+    abort "Resolve on Ruby #{LOCK_RUBY}, not #{RUBY_VERSION}: " \
+          "mise x ruby@#{LOCK_RUBY} -- bundle exec rake lock:refresh"
+  end
+
+  # with_unbundled_env, because `bundle exec rake` exports BUNDLE_GEMFILE and the nested `bundle`
+  # restores it from BUNDLER_ORIG_BUNDLE_GEMFILE, discarding the override below and writing every
+  # gemfile's resolution into the root Gemfile.lock.
+  Bundler.with_unbundled_env do
+    sh "bundle lock"
+    Dir["gemfiles/*.gemfile"].each do |gemfile|
+      # rails_edge.gemfile tracks rails/rails HEAD, so it ships no lockfile and resolves fresh.
+      next if gemfile.end_with?("rails_edge.gemfile")
+
+      sh "BUNDLE_GEMFILE=#{gemfile} bundle lock"
+    end
+  end
+end
+
 YARD::Rake::YardocTask.new
 
 namespace :yard do
