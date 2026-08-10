@@ -22,9 +22,18 @@ back as null again. Apply what is here rather than a round-tripped response.
 
 ## main.json
 
-A pull request is the only path onto `main`, and it merges only when `CI`, `Analyze (ruby)` and
-`Analyze (actions)` have passed. Force pushes and deletion are blocked, history stays linear, and
-`bypass_actors` is empty, which means the rules bind the maintainer too.
+A pull request is the only path onto `main`, and it merges only when `CI` has passed. Force pushes
+and deletion are blocked, history stays linear, and `bypass_actors` is empty, which means the rules
+bind the maintainer too.
+
+`CI` is the only required check, and it is the aggregate job that gates on every matrix leg, so
+requiring it requires all twenty. No CodeQL context is required, because CodeQL default setup emits
+`Analyze (<language>)` only on a pull request that touches files of that language, and the aggregate
+`CodeQL` context reports `neutral` rather than `success` when there is nothing to analyse. Neither
+satisfies a required check, so a lockfile-only Dependabot pull request was blocked with every check
+green: pull request 18 sat that way with all twenty-two checks passed. CodeQL still gates merges
+through the `code_scanning` rule below, which reads alert state rather than waiting for a check to be
+emitted.
 
 `required_approving_review_count` is 0 on purpose. One person holds every merge path here, and
 nobody can approve their own pull request, so requiring a review would make every change unmergeable
