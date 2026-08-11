@@ -26,8 +26,10 @@ A pull request is the only path onto `main`, and it merges only when `CI` has pa
 and deletion are blocked, history stays linear, and `bypass_actors` is empty, which means the rules
 bind the maintainer too.
 
-`CI` is the only required check, and it is the aggregate job that gates on every matrix leg, so
-requiring it requires all twenty. No CodeQL context is required, because CodeQL default setup emits
+`CI` is the only required check, and it is the aggregate job that waits on every matrix leg. It does
+not gate on all twenty. The `ruby-head` and Rails `edge` legs set `continue-on-error`, so eight legs
+report a failure without failing `CI`. A merge turns on the twelve released combinations. No CodeQL
+context is required, because CodeQL default setup emits
 `Analyze (<language>)` only on a pull request that touches files of that language, and the aggregate
 `CodeQL` context reports `neutral` rather than `success` when there is nothing to analyse. Neither
 satisfies a required check, so a lockfile-only Dependabot pull request was blocked with every check
