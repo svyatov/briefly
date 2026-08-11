@@ -34,6 +34,16 @@ task "lock:refresh" do
           "mise x ruby@#{LOCK_RUBY} -- bundle exec rake lock:refresh"
   end
 
+  # The root Gemfile branches on RAILS_VERSION, and `bundle exec` resolves it before this file is
+  # loaded, so an ambient value has already rewritten Gemfile.lock for that Rails line by the time
+  # the task runs. Unsetting it here would be too late: the next `bundle lock` is conservative and
+  # keeps the pin it finds. Refuse instead, and say which file to restore.
+  if ENV["RAILS_VERSION"]
+    abort "RAILS_VERSION=#{ENV["RAILS_VERSION"]} is set, and `bundle exec` has already resolved " \
+          "the root Gemfile for that line. Run: git checkout Gemfile.lock, then retry with " \
+          "RAILS_VERSION unset. Matrix locks come from gemfiles/, which set it themselves."
+  end
+
   # with_unbundled_env, because `bundle exec rake` exports BUNDLE_GEMFILE and the nested `bundle`
   # restores it from BUNDLER_ORIG_BUNDLE_GEMFILE, discarding the override below and writing every
   # gemfile's resolution into the root Gemfile.lock.
