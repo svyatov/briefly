@@ -20,11 +20,7 @@
       "type": "required_status_checks",
       "parameters": {
         "strict_required_status_checks_policy": true,
-        "required_status_checks": [
-          { "context": "CI", "integration_id": 15368 },
-          { "context": "Analyze (ruby)", "integration_id": 15368 },
-          { "context": "Analyze (actions)", "integration_id": 15368 }
-        ]
+        "required_status_checks": [{ "context": "CI", "integration_id": 15368 }]
       }
     },
     { "type": "required_linear_history" },
