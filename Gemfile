@@ -30,10 +30,10 @@ end
 
 gem "sqlite3", ">= 2.1"
 
-gem "rubocop", "~> 1.88"
+gem "rubocop", "~> 1.89"
 gem "rubocop-minitest", "~> 0.40"
 
-gem "rbs", "~> 4.0", require: false
+gem "rbs", "~> 4.1", require: false
 
 gem "yard", "~> 0.9", require: false
 
