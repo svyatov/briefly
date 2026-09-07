@@ -10,7 +10,7 @@ module Briefly
   # mutex, because rebinding alone would drop concurrent registrations.
   class Rescues
     # A single registration.
-    Entry = Struct.new(:klass, :handler)
+    Entry = Data.define(:klass, :handler)
 
     def initialize
       @entries = [].freeze
