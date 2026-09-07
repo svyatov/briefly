@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Changed
+- **BREAKING:** the minimum supported Ruby is now 3.3. Ruby 3.2 reached end of life in March 2026, and the CI matrix no longer tests it.
+
 ## v0.2.1 (2026-07-31)
 
 No change to `lib/` or `sig/`: this release carries the documentation the gem ships and the process

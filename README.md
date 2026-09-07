@@ -6,7 +6,7 @@ A terse, curated facade over your application's most reached-for objects.
 [![CI](https://github.com/svyatov/briefly/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/svyatov/briefly/actions/workflows/main.yml)
 [![coverage](https://codecov.io/gh/svyatov/briefly/branch/main/graph/badge.svg)](https://app.codecov.io/gh/svyatov/briefly)
 
-- **Ruby 3.2 and up.** Rails is optional: the gem does not declare it, and `Briefly::Rails` is
+- **Ruby 3.3 and up.** Rails is optional: the gem does not declare it, and `Briefly::Rails` is
   autoloaded only when you name it. The Rails packs themselves need Rails 7.2 or newer.
 - **25 shortcuts across six packs.** Config, env, view, db, instrument and reload, each usable on
   its own or taken together through the `"rails"` umbrella.

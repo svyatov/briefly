@@ -15,7 +15,7 @@ Gem::Specification.new do |spec|
   spec.homepage = "https://github.com/svyatov/briefly"
   spec.license = "MIT"
 
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 3.3.0"
 
   spec.require_paths = ["lib"]
   spec.files = Dir["lib/**/*.{rb,tt}"] + Dir["sig/**/*"] +
