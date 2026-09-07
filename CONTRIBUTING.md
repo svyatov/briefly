@@ -20,19 +20,19 @@ BUNDLE_GEMFILE=gemfiles/rails_7.2.gemfile bundle exec rake
 every time. That is why the edge and `ruby-head` CI legs are advisory rather than blocking.
 
 Changing the root `Gemfile` means regenerating all four lockfiles, or CI fails the frozen install
-before it runs a test. Regenerate them on Ruby 3.2, the lowest version the gemspec supports:
+before it runs a test. Regenerate them on Ruby 3.3, the lowest version the gemspec supports:
 
 ```sh
-mise x ruby@3.2 -- bundle exec rake lock:refresh
+mise x ruby@3.3 -- bundle exec rake lock:refresh
 ```
 
 Dependabot refreshes the root `Gemfile.lock` alone, because it matches a lockfile by the name beside
 a `Gemfile` it fetched and `gemfiles/rails_8.0.gemfile.lock` is not such a name. Run the task above
 whenever a Dependabot pull request touches the root lock, or the matrix locks drift out of step with
-it. The task refuses to run on any Ruby but 3.2, for the reason below.
+it. The task refuses to run on any Ruby but 3.3, for the reason below.
 
-The Ruby version matters. A lockfile resolved on 4.0 can pin a gem that requires 3.3 or newer, and
-the 3.2 CI legs then fail the frozen install rather than re-resolving, which is the whole point of
+The Ruby version matters. A lockfile resolved on 4.0 can pin a gem that requires 3.4 or newer, and
+the 3.3 CI legs then fail the frozen install rather than re-resolving, which is the whole point of
 freezing. Resolving on the oldest supported Ruby picks versions every leg in the matrix can install.
 
 Only `activesupport` is needed: the Rails packs are exercised against a real
@@ -40,7 +40,7 @@ Only `activesupport` is needed: the Rails packs are exercised against a real
 
 ## Code style
 
-- Ruby 3.2+, two-space indent, 120 columns, `bundle exec rubocop` clean.
+- Ruby 3.3+, two-space indent, 120 columns, `bundle exec rubocop` clean.
 - **One runtime dependency, `candor`, and no others.** It is itself dependency-free; do not add a second.
 - Inside `lib/briefly/rails*.rb` the framework is always `::Rails`, because a bare `Rails` resolves to
   `Briefly::Rails`. A test enforces this.

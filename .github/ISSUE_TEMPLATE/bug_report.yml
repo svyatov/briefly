@@ -32,7 +32,7 @@ body:
     id: ruby-version
     attributes:
       label: Ruby version
-      description: "`ruby -v`. briefly supports 3.2 and up."
+      description: "`ruby -v`. briefly supports 3.3 and up."
       placeholder: 3.4.1
     validations:
       required: true

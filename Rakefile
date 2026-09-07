@@ -21,8 +21,8 @@ task :rbs do
 end
 
 # The Ruby the gemspec floors at. A lockfile resolved on a newer Ruby can pin a gem that requires
-# 3.3 or newer, and the 3.2 legs then fail the frozen install rather than re-resolving.
-LOCK_RUBY = "3.2"
+# 3.4 or newer, and the 3.3 legs then fail the frozen install rather than re-resolving.
+LOCK_RUBY = "3.3"
 
 # Dependabot refreshes Gemfile.lock only. It matches lockfiles by the name beside a Gemfile it
 # fetched, and `gemfiles/rails_8.0.gemfile.lock` is not such a name, so the matrix locks have to be
