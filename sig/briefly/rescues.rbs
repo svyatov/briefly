@@ -2,9 +2,9 @@ module Briefly
   # An ordered list of facade-wide and global `rescue_from` registrations, queried at dispatch time.
   class Rescues
     # A single registration.
-    class Entry < ::Struct[untyped]
-      attr_accessor klass: Class
-      attr_accessor handler: Briefly::handler
+    class Entry < ::Data
+      attr_reader klass: Class
+      attr_reader handler: Briefly::handler
 
       def self.new: (Class klass, Briefly::handler handler) -> Entry
     end

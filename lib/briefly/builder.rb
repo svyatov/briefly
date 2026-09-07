@@ -9,7 +9,7 @@ module Briefly
     # A validated {#compile!} pass, ready for a {Briefly::Facade} to install. +child_plans+ holds one
     # +[child_facade, child_plan]+ pair per namespace this pass collected, so +__commit+ can walk the
     # tree children first.
-    Plan = Struct.new(:defs, :rescue_entries, :children, :child_plans)
+    Plan = Data.define(:defs, :rescue_entries, :children, :child_plans)
 
     # @return [Briefly::Facade] the facade under construction, for packs that need lifecycle hooks
     attr_reader :facade
