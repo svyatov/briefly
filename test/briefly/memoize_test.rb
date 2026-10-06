@@ -27,10 +27,17 @@ class MemoizeTest < BrieflyTest
   end
 
   def test_memoizes_false
-    facade = Briefly.define { shortcut(:no) { false }.memoize }
+    calls = 0
+    facade = Briefly.define do
+      shortcut(:no) do
+        calls += 1
+        false
+      end.memoize
+    end
 
-    refute facade.no
-    refute facade.no
+    assert_same false, facade.no
+    assert_same false, facade.no
+    assert_equal 1, calls
   end
 
   def test_aliases_share_one_memo_cell
