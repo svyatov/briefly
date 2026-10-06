@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Added
+- `App.db.value(sql, *binds)` returns the first column of the first row through `select_value`, or
+  `nil` for no row or SQL NULL. It uses the same positional and named binds as `select` and `query`.
+
 ### Changed
 - **BREAKING:** the minimum supported Ruby is now 3.3. Ruby 3.2 reached end of life in March 2026, and the CI matrix no longer tests it.
 

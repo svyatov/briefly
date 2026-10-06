@@ -164,8 +164,8 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
 - **`clear_memos!` cascades into namespace children.** One `Reload` on the root clears the whole tree,
   including a namespace holding no Rails pack. Without this, memoizing inside a namespace pins a value
   across reloads, and no test but `test_clear_memos_cascades_into_namespaces` notices.
-- **`Briefly::Rails::DB#select` reads through `select_all`; `#query` runs through `exec_query`.**
-  `select` and `query` share one `install`-local closure that differs by exactly the adapter method it
+- **`Briefly::Rails::DB#select` reads through `select_all`; `#value` through `select_value`; `#query` through `exec_query`.**
+  `select`, `value` and `query` share one `install`-local closure that differs by exactly the adapter method it
   `public_send`s. `select_all` is the read-optimized path Rails recommends for a raw SELECT, returning
   an `ActiveRecord::Result` without clearing the query cache; `exec_query` is the general form that runs
   writes and DDL too. The split is name and cache-path, not a runtime read/write guard — `select_all`
@@ -173,6 +173,7 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   `test_select_reads_through_select_all_not_exec_query` and `test_query_runs_through_exec_query_not_select_all`,
   which spy the connection `with_connection` yields so a revert to the wrong method fails rather than
   staying green (row/shape assertions pass under either).
+  `test_value_reads_through_select_value_without_exec_query` pins the scalar read path too.
 - **`Briefly::Rails::DB#connection`/`#conn` is a bare `with_connection` passthrough, structurally the
   `transaction` line.** Body `{ |**opts, &blk| model.call.with_connection(**opts, &blk) }` — it yields
   the leased connection, auto-releases at block exit, and forwards every keyword, so the whole
@@ -185,13 +186,13 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   `test_connection_yields_a_live_connection_and_returns_the_block_value`,
   `test_connection_forwards_keywords_to_with_connection`, `test_connection_without_a_block_raises`, and
   `test_connection_releases_the_lease_when_the_block_raises`.
-- **Neither `Briefly::Rails::DB#select` nor `#query` may sanitize a bindless statement.**
+- **`Briefly::Rails::DB#select`, `#value` and `#query` must pass bindless statements through unchanged.**
   `sanitize_sql_array` falls through to a `statement % values` branch that raises on any literal `%` —
-  `... like '%ada%'`. The bindless-skip lives once, in the shared closure, and covers both shortcuts.
-- **Neither `Briefly::Rails::DB#select` nor `#query` declares a keyword parameter.** Accepting none is
+  `... like '%ada%'`. The bindless-skip lives once, in the shared closure, and covers all three shortcuts.
+- **`Briefly::Rails::DB#select`, `#value` and `#query` take `sql, *binds` with no keyword parameter.** Accepting none is
   what makes Ruby pack `select(sql, id: 1)` into `binds` as a trailing Hash, which is how named binds
   reach `sanitize_sql_array`. A `**opts` would swallow them and send the statement to the database
-  unbound. The `|sql, *binds|` shape is shared by both; changing either to take `**opts` breaks binds.
+  unbound. The `|sql, *binds|` shape is shared by all three; adding `**opts` to any of them breaks binds.
 - **`Briefly::Rails::DB#connected_to` forwards `**opts` to the resolved base; `#reading` / `#writing`
   pin the role after the splat.** `connected_to` is a faithful passthrough — role, shard, prevent_writes,
   custom roles — so the whole Rails multi-database surface is reachable. `reading`/`writing` are sugar:
@@ -201,7 +202,7 @@ Break one of these and the gem is unsafe. Each is pinned by a test — find it b
   such a class; on a concrete model it raises `NotImplementedError`. Pinned by
   `test_reading_and_writing_pin_their_role` and `test_connected_to_forwards_arbitrary_roles`.
 - **`Briefly::Rails::DB` reaches the pool only through `with_connection`, never `connection`.** Every
-  shortcut that touches a connection (`conn`, `select`, `query`) routes through `with_connection`;
+  shortcut that touches a connection (`conn`, `select`, `value`, `query`) routes through `with_connection`;
   `.connection` is soft-deprecated and raises under `ActiveRecord.permanent_connection_checkout =
   :disallowed` — set in the real-AR test harness, so the pack's `.connection`-avoidance is pinned rather
   than assumed. Pinned by `test_the_pack_never_reaches_for_the_deprecated_connection_method`.
