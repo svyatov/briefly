@@ -16,7 +16,7 @@ module Briefly
     # the captured class would go stale on the first code reload — permanently, since {Reload} clears
     # memos, not closures. A Module is accepted for applications outside the autoloader, with that caveat.
     #
-    # Nothing here memoizes: the block-form shortcuts can't be memoized, and +select+/+query+ take
+    # Nothing here memoizes: the block-form shortcuts can't be memoized, and +select+/+value+/+query+ take
     # arguments. So the pack does not wire {Reload}, and works without a booted application.
     #
     # +connected_to+ forwards every argument to +base.connected_to+ — +role:+, +shard:+, +prevent_writes:+,
@@ -48,11 +48,12 @@ module Briefly
         # always reads, while `shard:` and `prevent_writes:` still forward.
         builder.shortcut(:reading) { |**opts, &blk| connected_to(**opts, role: :reading, &blk) }
         builder.shortcut(:writing) { |**opts, &blk| connected_to(**opts, role: :writing, &blk) }
-        # `select` and `query` share one closure, differing only by the adapter method. `select` runs a
+        # `select`, `value` and `query` share one closure, differing only by the adapter method. `select` runs a
         # read through `select_all` — the read-optimized path for a raw SELECT, returning an
         # `ActiveRecord::Result` without clearing the query cache. `query` runs arbitrary SQL through
         # `exec_query` — writes and DDL included. Neither polices the SQL it's given; the split is name
         # and cache-path, not a runtime read/write guard.
+        # `value` uses `select_value` for the first column of the first row, or nil for no row or SQL NULL.
         #
         # `with_connection`, not `connection`: the latter is soft-deprecated, and raises outright under
         # `ActiveRecord.permanent_connection_checkout = :disallowed`.
@@ -60,7 +61,7 @@ module Briefly
         # A bindless statement must skip `sanitize_sql_array`, which would fall through to its
         # `statement % values` branch and raise on any literal `%` — `... like '%foo%'`.
         #
-        # No `**` parameter on either shortcut, deliberately: taking no keywords is what makes Ruby pack
+        # No `**` parameter on these shortcuts, deliberately: taking no keywords is what makes Ruby pack
         # `select(sql, id: 1)` into `binds` as a trailing Hash, which is how named binds reach
         # `sanitize_sql_array`. A `**opts` would swallow them and send the statement unbound.
         run = lambda do |method, sql, binds|
@@ -69,6 +70,7 @@ module Briefly
           record.with_connection { |connection| connection.public_send(method, statement) }
         end
         builder.shortcut(:select) { |sql, *binds| run.call(:select_all, sql, binds) }
+        builder.shortcut(:value) { |sql, *binds| run.call(:select_value, sql, binds) }
         builder.shortcut(:query) { |sql, *binds| run.call(:exec_query, sql, binds) }
         builder
       end

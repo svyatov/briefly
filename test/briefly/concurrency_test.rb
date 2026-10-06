@@ -87,16 +87,33 @@ class ConcurrencyTest < BrieflyTest
       shortcut(:value) { Object.new }.memoize
     end
 
-    stop = false
-    seen = Thread::Queue.new
-    readers = Array.new(4) { Thread.new { seen << facade.value until stop } }
-    Thread.new { 500.times { facade.briefly.clear_memos! } }.join
-    stop = true
-    readers.each(&:join)
+    ready = Thread::Queue.new
+    start = Thread::Queue.new
+    readers = Array.new(4) do
+      Thread.new do
+        ready << true
+        start.pop
+        Array.new(500) do
+          Thread.pass
+          facade.value
+        end
+      end
+    end
+    clearer = Thread.new do
+      ready << true
+      start.pop
+      500.times do
+        facade.briefly.clear_memos!
+        Thread.pass
+      end
+    end
+    # Start every worker together; bounded reads avoid filling a queue while the clearer waits to run.
+    5.times { ready.pop }
+    5.times { start << true }
+    clearer.value
+    values = readers.flat_map(&:value)
 
-    values = Array.new(seen.size) { seen.pop }
-
-    refute_empty values
+    assert_equal 2000, values.size
     refute_includes values, nil
   end
 
