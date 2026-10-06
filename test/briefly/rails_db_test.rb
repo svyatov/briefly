@@ -78,6 +78,17 @@ class RailsDbTest < BrieflyTest
     db = build_db
 
     assert_equal :from_block, db.txn(requires_new: true) { :from_block }
+
+    # Dropping requires_new joins the outer transaction, so the inner rollback keeps "dave" too.
+    db.txn do
+      insert("carol")
+      db.txn(requires_new: true) do
+        insert("dave")
+        raise ActiveRecord::Rollback
+      end
+    end
+
+    assert_equal %w[ada bob adalovelace carol], db.select("select name from items order by id").rows.flatten
   end
 
   def test_transaction_commits_on_success_and_rolls_back_on_raise
