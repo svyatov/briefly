@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+## v0.3.0 (2026-10-06)
+
 ### Added
 - `App.db.value(sql, *binds)` returns the first column of the first row through `select_value`, or
   `nil` for no row or SQL NULL. It uses the same positional and named binds as `select` and `query`.
