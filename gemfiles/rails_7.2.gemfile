@@ -7,3 +7,6 @@
 ENV["RAILS_VERSION"] = "7.2"
 
 eval_gemfile File.expand_path("../Gemfile", __dir__)
+
+# ActiveSupport 7.2 requires CGI, which Ruby 4.0 no longer bundles.
+gem "cgi", require: false
