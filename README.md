@@ -8,7 +8,7 @@ A terse, curated facade over your application's most reached-for objects.
 
 - **Ruby 3.3 and up.** Rails is optional: the gem does not declare it, and `Briefly::Rails` is
   autoloaded only when you name it. The Rails packs themselves need Rails 7.2 or newer.
-- **25 shortcuts across six packs.** Config, env, view, db, instrument and reload, each usable on
+- **26 shortcuts across six packs.** Config, env, view, db, instrument and reload, each usable on
   its own or taken together through the `"rails"` umbrella.
 - **One runtime dependency.** [candor](https://github.com/svyatov/candor), which is itself
   dependency-free.
@@ -349,7 +349,7 @@ end
 | `Briefly::Rails::Config` | `"rails/config"` | `config`, `config_x`, `root`, `cache`, `logger`, `credentials`, `error`, `config_for` |
 | `Briefly::Rails::Env` | `"rails/env"` | `env` and its predicates |
 | `Briefly::Rails::View` | `"rails/view"` | `helpers`, `routes`, `renderer`, `render` |
-| `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `select`, `query`, `connected_to`, `reading`, `writing` |
+| `Briefly::Rails::DB` | `"rails/db"` | `connection`, `transaction`, `select`, `value`, `query`, `connected_to`, `reading`, `writing` |
 | `Briefly::Rails::Instrument` | `"rails/instrument"` | `instrument` |
 | `Briefly::Rails::Reload` | `"rails/reload"` | none; clears memos on every code reload |
 
@@ -370,6 +370,7 @@ end
 | `connection` | `conn` | forwards keywords and the block to `base.with_connection`, yielding the connection and auto-releasing |
 | `transaction` | `txn` | forwards keywords and the block to `base.transaction` |
 | `select` | | `base.with_connection { \|c\| c.select_all(sql) }`, a read (SELECT) on the cache-aware path |
+| `value` | | `base.with_connection { \|c\| c.select_value(sql) }`, the first column of the first row, or `nil` for no row or SQL NULL |
 | `query` | | `base.with_connection { \|c\| c.exec_query(sql) }`, arbitrary SQL, writes and DDL included |
 | `connected_to` | | forwards every argument to `base.connected_to` (`role:`, `shard:`, `prevent_writes:`) |
 | `reading` | | runs the block under the `:reading` role |
@@ -384,22 +385,27 @@ App = Briefly.define do
 end
 
 App.db.txn { App.db.select("select * from users where id = ?", 1) }
-App.db.conn { |c| c.select_value("select count(*) from users") }
+App.db.value("select count(*) from users")
 ```
 
-`select` and `query` are the two raw-SQL helpers, differing only in which adapter path they take.
+`select`, `value` and `query` are the raw-SQL helpers, differing only in which adapter path they take.
 `select(sql, *binds)` runs a read through `select_all`, the path Rails recommends for a raw SELECT,
 returning an `ActiveRecord::Result` without clearing the query cache. `query(sql, *binds)` runs
 arbitrary SQL through `exec_query`: reads, writes, and DDL all execute. The name tells you which
 you're reaching for; neither polices the SQL it's handed, so `select` will happily run a write you
 give it. The split is name and cache-path, not a runtime guard.
 
-Both sanitize through `base.sanitize_sql_array` when binds are given, and pass the statement through
+`value(sql, *binds)` reads through `select_value` when you need a single result, such as a count.
+It returns the first column of the first row, or `nil` for no row or SQL NULL. Its arguments follow
+the same bind convention as `select` and `query`, rather than the adapter's full signature.
+
+All three sanitize through `base.sanitize_sql_array` when binds are given, and pass the statement through
 untouched when they are not. Positional and named binds both work, from application code:
 
 ```ruby
 App.db.select("select * from users where name like '%ada%'")         # no binds, passed through
 App.db.select("select * from users where id = ?", 123)               # positional
+App.db.value("select count(*) from users where active = :active", active: true)
 App.db.query("update users set active = true where id = :id", id: 1) # named, a write via `query`
 ```
 

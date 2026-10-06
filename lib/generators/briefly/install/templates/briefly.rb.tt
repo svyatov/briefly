@@ -39,6 +39,7 @@ end
 #   db       <%= name %>.db.connection { |c| }, <%= name %>.db.conn { |c| } -> yields a connection, auto-releases
 #            <%= name %>.db.transaction { }, <%= name %>.db.txn { } -> wraps the block in a transaction
 #            <%= name %>.db.select(sql, id: 1) / select(sql, 1) -> a read (SELECT); named or positional binds
+#            <%= name %>.db.value(sql, id: 1) / value(sql, 1) -> first column of first row; nil for no row or SQL NULL
 #            <%= name %>.db.query(sql, id: 1) / query(sql, 1) -> arbitrary SQL (writes, DDL); same binds
 #            <%= name %>.db.connected_to(role:, shard:, prevent_writes:) { }
 #            <%= name %>.db.reading { }, <%= name %>.db.writing { } -> run the block under a role

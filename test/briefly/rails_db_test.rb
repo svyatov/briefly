@@ -69,6 +69,7 @@ class RailsDbTest < BrieflyTest
 
     db.conn { |c| c }
     db.select("select 1")
+    db.value("select 1")
     db.query("select 1")
     db.txn { nil }
   end
@@ -113,6 +114,37 @@ class RailsDbTest < BrieflyTest
     assert_instance_of ActiveRecord::Result, result
     assert_equal([{ "id" => 1, "name" => "ada" }, { "id" => 2, "name" => "bob" },
                   { "id" => 3, "name" => "adalovelace" }], result.to_a)
+  end
+
+  def test_value_returns_the_first_column_of_the_first_row
+    assert_equal "ada", build_db.value("select name, id from items order by id")
+  end
+
+  def test_value_returns_nil_when_no_row_matches
+    assert_nil build_db.value("select name from items where id = 0")
+  end
+
+  def test_value_returns_nil_for_sql_null
+    assert_nil build_db.value("select null, name from items order by id")
+  end
+
+  def test_value_binds_positional_placeholders
+    assert_equal "bob", build_db.value("select name from items where id = ? and name = ?", 2, "bob")
+  end
+
+  def test_value_binds_named_keywords_and_quotes_values
+    assert_equal "O'Hara", build_db.value("select :name from items where id = :id", name: "O'Hara", id: 2)
+  end
+
+  def test_value_without_binds_keeps_a_literal_percent
+    assert_equal 2, build_db.value("select count(*) from items where name like '%ada%'")
+  end
+
+  def test_value_reads_through_select_value_without_exec_query
+    reached = spy_adapter_methods
+
+    assert_equal 3, build_db.value("select count(*) from items")
+    assert_equal %i[select_value select_all], reached
   end
 
   # A bindless statement skips `sanitize_sql_array`, whose `statement % values` branch would raise on
@@ -254,7 +286,8 @@ class RailsDbTest < BrieflyTest
 
     facade = Briefly.define { use Briefly::Rails::DB }
 
-    assert_equal %i[connected_to connection query reading select transaction writing], facade.briefly.shortcuts.sort
+    assert_equal %i[connected_to connection query reading select transaction value writing],
+                 facade.briefly.shortcuts.sort
   end
 
   def test_the_pack_memoizes_nothing
@@ -273,7 +306,7 @@ class RailsDbTest < BrieflyTest
     Briefly.define { namespace(:db) { use "rails/db", base: base } }.db
   end
 
-  # Wraps `select_all` and `exec_query` on the currently-leased connection so each call is recorded.
+  # Wraps the read and execution methods on the currently-leased connection so each call is recorded.
   # `with_connection` yields this same held instance, so the spy sees whichever method the pack picks.
   # Prepended (not `define_singleton_method`) so two spy tests reusing the pooled connection don't warn
   # about redefining a singleton method.
@@ -281,7 +314,7 @@ class RailsDbTest < BrieflyTest
     connection = ARTest::ApplicationRecord.lease_connection
     reached = []
     recorder = Module.new do
-      %i[select_all exec_query].each do |method|
+      %i[select_all select_value exec_query].each do |method|
         define_method(method) do |*args, **kwargs, &blk|
           reached << method
           super(*args, **kwargs, &blk)
