@@ -21,7 +21,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir["lib/**/*.{rb,tt}"] + Dir["sig/**/*"] +
                %w[.yardopts CHANGELOG.md LICENSE.txt README.md briefly.gemspec]
 
-  spec.add_dependency "candor", "~> 0.2.0"
+  spec.add_dependency "candor", ">= 0.2", "< 0.4"
 
   spec.metadata["rubygems_mfa_required"] = "true"
   spec.metadata["documentation_uri"] = "https://rubydoc.info/gems/briefly"
