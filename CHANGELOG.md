@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Changed
+- Change the candor dependency to `~> 0.3`, requiring candor 0.3.0 or later, below 1.0.
+
 ## v0.3.0 (2026-10-06)
 
 ### Added
