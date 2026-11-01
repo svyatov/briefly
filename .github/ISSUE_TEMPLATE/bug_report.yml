@@ -23,8 +23,8 @@ body:
     id: candor-version
     attributes:
       label: candor version
-      description: "`bundle list candor`. briefly pins `~> 0.2.0`, so this can differ from the last release you saw."
-      placeholder: 0.2.1
+      description: "`bundle list candor`. briefly allows `~> 0.3`, so this can differ from the last release you saw."
+      placeholder: 0.3.0
     validations:
       required: true
 
